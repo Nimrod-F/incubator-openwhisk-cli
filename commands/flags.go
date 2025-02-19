@@ -142,6 +142,11 @@ type ActionFlags struct {
 	web           string
 	websecure     string
 	sequence      bool
+	projection    bool
+	program       bool
+	fork          bool
+	app           bool
+	dagular       bool // XXXdagular
 	timeout       int
 	memory        int
 	logsize       int

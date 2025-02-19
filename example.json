@@ -1,0 +1,45 @@
+{
+  "data": "block_expr",
+  "children": [
+    {
+      "data": "assign",
+      "children": [
+        { "data": "id", "children": ["input_data"] },
+        {
+          "data": "list",
+          "children": [
+            { "data": "number", "children": [1] },
+            { "data": "number", "children": [2] },
+            { "data": "number", "children": [3] }
+          ]
+        }
+      ]
+    },
+    {
+      "data": "assign",
+      "children": [
+        { "data": "id", "children": ["results"] },
+        {
+          "data": "map_expr",
+          "children": [
+            { "data": "string", "children": ["x"] },
+            { "data": "id", "children": ["input_data"] },
+            {
+              "data": "invocation",
+              "children": [
+                { "data": "string", "children": ["increment"] },
+                { "data": "id", "children": ["x"] }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "data": "return",
+      "children": [
+        { "data": "id", "children": ["results"] }
+      ]
+    }
+  ]
+}

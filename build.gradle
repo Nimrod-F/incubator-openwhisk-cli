@@ -21,13 +21,11 @@ buildscript {
     jcenter()
     mavenCentral()
   }
-  dependencies {
-    classpath "cz.alenkacz:gradle-scalafmt:${gradle.scalafmt.version}"
-  }
 }
 
 plugins {
     id 'com.github.blindpirate.gogradle' version '0.10'
+    id("cz.alenkacz.gradle.scalafmt") version "1.16.2"
 }
 
 subprojects {
