@@ -1,0 +1,56 @@
+{
+  "data": "block_expr",
+  "children": [
+    {
+      "data": "assign",
+      "children": [
+        { "data": "id", "children": ["greet"] },
+        {
+          "data": "lambda",
+          "children": [
+            "n",
+            {
+              "data": "invocation",
+              "children": [
+                "/_/hello",
+                {
+                  "data": "dict",
+                  "children": [
+                    {
+                      "data": "pair",
+                      "children": [
+                        { "data": "id", "children": ["name"] },
+                        { "data": "id", "children": ["n"] }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "data": "assign",
+      "children": [
+        { "data": "id", "children": ["greeting"] },
+        {
+          "data": "apply",
+          "children": [
+            { "data": "id", "children": ["greet"] },
+            { "data": "string", "children": ["Daniel"] }
+          ]
+        }
+      ]
+    },
+
+    {
+      "data": "return",
+      "children": [
+        { "data": "id", "children": ["greeting"] }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "data": "block_expr",
+  "children": [
+    {
+      "data": "assign",
+      "children": [
+        { "data": "id", "children": ["add"] },
+        {
+          "data": "lambda",
+          "children": [
+            "x",
+            {
+              "data": "lambda",
+              "children": [
+                "y",
+                {
+                  "data": "binop",
+                  "children": [
+                    { "data": "id", "children": ["x"] },
+                    "+",
+                    { "data": "id", "children": ["y"] }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "data": "assign",
+      "children": [
+        { "data": "id", "children": ["add2"] },
+        {
+          "data": "apply",
+          "children": [
+            { "data": "id", "children": ["add"] },
+            { "data": "number", "children": [2] }
+          ]
+        }
+      ]
+    },
+    {
+      "data": "assign",
+      "children": [
+        { "data": "id", "children": ["sum"] },
+        {
+          "data": "apply",
+          "children": [
+            { "data": "id", "children": ["add2"] },
+            { "data": "number", "children": [100] }
+          ]
+        }
+      ]
+    },
+    {
+      "data": "return",
+      "children": [
+        {
+          "data": "dict",
+          "children": [
+            {
+              "data": "pair",
+              "children": [
+                { "data": "id", "children": ["sum"] },
+                { "data": "id", "children": ["sum"] }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
