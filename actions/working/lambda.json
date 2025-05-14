@@ -48,7 +48,7 @@
           "data": "apply",
           "children": [
             { "data": "id", "children": ["add2"] },
-            { "data": "number", "children": [100] }
+            { "data": "number", "children": [3] }
           ]
         }
       ]

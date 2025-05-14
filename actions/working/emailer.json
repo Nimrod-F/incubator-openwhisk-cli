@@ -1,0 +1,101 @@
+{
+  "data": "block_expr",
+  "children": [
+    {
+      "data": "assign",
+      "children": [
+        { "data": "id", "children": ["emailer"] },
+        {
+          "data": "lambda",
+          "children": [
+            "template",
+            {
+              "data": "lambda",
+              "children": [
+                "user",
+                {
+                  "data": "invocation",
+                  "children": [
+                    "/_/sendEmail",
+                    {
+                      "data": "dict",
+                      "children": [
+                        {
+                          "data": "pair",
+                          "children": [
+                            { "data": "id", "children": ["to"] },
+                            { "data": "id", "children": ["user"] }
+                          ]
+                        },
+                        {
+                          "data": "pair",
+                          "children": [
+                            { "data": "id", "children": ["template"] },
+                            { "data": "id", "children": ["template"] }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "data": "assign",
+      "children": [
+        { "data": "id", "children": ["welcomeEmail"] },
+        {
+          "data": "apply",
+          "children": [
+            { "data": "id", "children": ["emailer"] },
+            { "data": "string", "children": ["welcomeTemplate"] }
+          ]
+        }
+      ]
+    },
+    {
+      "data": "assign",
+      "children": [
+        { "data": "id", "children": ["users"] },
+        {
+          "data": "list",
+          "children": [
+            { "data": "string", "children": ["alice@example.com"] },
+            { "data": "string", "children": ["bob@example.com"]   },
+            { "data": "string", "children": ["carol@example.com"] }
+          ]
+        }
+      ]
+    },
+    {
+      "data": "assign",
+      "children": [
+        { "data": "id", "children": ["results"] },
+        {
+          "data": "map_expr",
+          "children": [
+            "u",
+            { "data": "id", "children": ["users"] },
+            {
+              "data": "apply",
+              "children": [
+                { "data": "id", "children": ["welcomeEmail"] },
+                { "data": "id", "children": ["u"] }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "data": "return",
+      "children": [
+        { "data": "id", "children": ["results"] }
+      ]
+    }
+  ]
+}
