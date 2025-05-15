@@ -1,0 +1,64 @@
+{
+  "data": "block_expr",
+  "children": [
+    {
+      "data": "assign",
+      "children": [
+        { "data": "id", "children": ["currentUser"] },
+        {
+          "data": "invocation",
+          "children": [
+            "/_/current_user",
+            { "data": "dict", "children": [
+              {
+                "data": "pair",
+                "children": [
+                  { "data": "id",     "children": [ "q_number"  ] },
+                  { "data": "string", "children": [ "QXZ5H95" ] }
+                ]
+              }
+            ] }
+          ]
+        }
+      ]
+    },
+    {
+      "data": "return",
+      "children": [
+        {
+          "data": "if_expr",
+          "children": [
+            {
+              "data": "binop",
+              "children": [
+                {
+                  "data": "index",
+                  "children": [
+                    { "data": "id", "children": ["currentUser"] },
+                    { "data": "string", "children": ["age"] }
+                  ]
+                },
+                ">",
+                { "data": "number", "children": [18] }
+              ]
+            },
+            {
+              "data": "invocation",
+              "children": [
+                "/_/functionA",
+                { "data": "dict", "children": [] }
+              ]
+            },
+            {
+              "data": "invocation",
+              "children": [
+                "/_/functionB",
+                { "data": "dict", "children": [] }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
