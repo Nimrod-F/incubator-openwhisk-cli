@@ -364,7 +364,7 @@ func configureFeed(triggerName string, feedName string, parameters interface{}) 
 		return NewQualifiedNameError(feedName, err)
 	}
 
-	res, err := invokeAction(*fullFeedName, parameters, true, false)
+	res, err := invokeAction(*fullFeedName, parameters, true, false, false)
 	err = printInvocationResponse(*fullFeedName, true, false, res, err)
 
 	if err != nil {
@@ -481,7 +481,7 @@ func (t *Trigger) Create(Client *whisk.Client, args []string) error {
 
 		// Invoke the specified feed action to configure the trigger feed
 		if feedQualifiedName != nil {
-			res, err := invokeAction(*feedQualifiedName, parameters, true, false)
+			res, err := invokeAction(*feedQualifiedName, parameters, true, false, false)
 			if err != nil {
 				whisk.Debug(whisk.DbgError, "Failed configuring feed '%s' failed: %s\n", feedQualifiedName.GetFullQualifiedName(), err)
 
@@ -561,7 +561,7 @@ func CreateExtendedVersion(Client *whisk.Client, args []string) error {
 	createOrUpdate(Client, triggerName, trigger, false)
 	// Invoke the specified feed action to configure the trigger feed
 	if feedQualifiedName != nil {
-		res, err := invokeAction(*feedQualifiedName, feedParams, true, false)
+		res, err := invokeAction(*feedQualifiedName, feedParams, true, false, false)
 		if err != nil {
 			whisk.Debug(whisk.DbgError, "Failed configuring feed '%s' failed: %s\n", feedQualifiedName.GetFullQualifiedName(), err)
 

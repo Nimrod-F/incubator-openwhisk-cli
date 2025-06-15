@@ -147,6 +147,7 @@ type ActionFlags struct {
 	fork          bool
 	app           bool
 	dagular       bool // XXXdagular
+	prewarm       bool // prewarm for dagular
 	timeout       int
 	memory        int
 	logsize       int

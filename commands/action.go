@@ -177,7 +177,7 @@ var actionInvokeCmd = &cobra.Command{
 			1,
 			1,
 			"Action invoke",
-			wski18n.T("An action name is required.")); whiskErr != nil {
+			wski18n.T("An ACTION name is required.")); whiskErr != nil {
 			return whiskErr
 		}
 
@@ -188,32 +188,232 @@ var actionInvokeCmd = &cobra.Command{
 		parameters = getParameters(Flags.common.param, false, false)
 		blocking := Flags.common.blocking || Flags.action.result
 		resultOnly := Flags.action.result
+		prewarm := Flags.action.prewarm
 		header := !resultOnly
 
 		res, err := invokeAction(
 			*qualifiedName,
 			parameters,
 			blocking,
-			resultOnly)
+			resultOnly,
+			prewarm)
 
 		return printInvocationResponse(*qualifiedName, blocking, header, res, err)
 	},
 }
 
+// func invokeAction(
+// 	qualifiedName QualifiedName,
+// 	parameters interface{},
+// 	blocking bool,
+// 	result bool) (interface{}, error) {
+// 	// TODO remove all global modifiers
+// 	Client.Namespace = qualifiedName.GetNamespace()
+// 	res, _, err := Client.Actions.Invoke(
+// 		qualifiedName.GetEntityName(),
+// 		parameters,
+// 		blocking,
+// 		result)
+// 	return res, err
+// }
+
 func invokeAction(
-	qualifiedName QualifiedName,
-	parameters interface{},
-	blocking bool,
-	result bool) (interface{}, error) {
-	// TODO remove all global modifiers
-	Client.Namespace = qualifiedName.GetNamespace()
-	res, _, err := Client.Actions.Invoke(
-		qualifiedName.GetEntityName(),
-		parameters,
-		blocking,
-		result)
-	return res, err
+    qualifiedName QualifiedName,
+    parameters interface{},
+    blocking bool,
+    result bool,
+    prewarm bool,
+) (interface{}, error) {
+    fmt.Printf("Attempting to invoke action: %s\n", qualifiedName.GetEntityName())
+
+    // Only try to pre-warm if the user asked for it
+    didPrewarm := false
+    if prewarm {
+        fmt.Printf("Pre-warming enabled – fetching action...\n")
+        Client.Namespace = qualifiedName.GetNamespace()
+        action, _, err := Client.Actions.Get(qualifiedName.GetEntityName(), true)
+        if err == nil && action.Exec != nil && action.Exec.Code != nil {
+            // parse JSON to detect dagular...
+            var jsonData map[string]interface{}
+            if err := json.Unmarshal([]byte(*action.Exec.Code), &jsonData); err == nil {
+                if _, hasData := jsonData["data"]; hasData {
+                    if _, hasChildren := jsonData["children"]; hasChildren {
+                        fmt.Printf("Detected dagular action: %s\n", qualifiedName.GetEntityName())
+                        invocations := extractInvocations([]byte(*action.Exec.Code))
+                        fmt.Printf("Found %d invocations to pre-warm\n", len(invocations))
+
+                        for _, invocation := range invocations {
+                            go func(inv string) {
+                                // pre-warm each discovered action
+                                name, err := NewQualifiedName(inv)
+                                if err != nil {
+                                    fmt.Printf("Bad name %s: %v\n", inv, err)
+                                    return
+                                }
+                                origNS := Client.Namespace
+                                Client.Namespace = name.GetNamespace()
+
+                                fmt.Printf("Pre-warming %s/%s...\n", name.GetNamespace(), name.GetEntityName())
+                                _, _, err = Client.Actions.Invoke(
+                                    name.GetEntityName(),
+                                    map[string]interface{}{},
+                                    false,
+                                    false,
+                                )
+                                if err != nil {
+                                    fmt.Printf("Pre-warm failure for %s: %v\n", name.GetEntityName(), err)
+                                } else {
+                                    fmt.Printf("Pre-warmed %s successfully\n", name.GetEntityName())
+                                }
+
+                                Client.Namespace = origNS
+                            }(invocation)
+                        }
+                        didPrewarm = true
+                    }
+                }
+            }
+        }
+        if !didPrewarm {
+            fmt.Println("Skipped pre-warming: not a dagular action or parse failed")
+        }
+    } else {
+        fmt.Println("Pre-warming disabled by flag")
+    }
+
+    // 2. Now perform the real invocation
+    fmt.Printf("Proceeding with main invocation: %s\n", qualifiedName.GetEntityName())
+    Client.Namespace = qualifiedName.GetNamespace()
+    res, _, err := Client.Actions.Invoke(
+        qualifiedName.GetEntityName(),
+        parameters,
+        blocking,
+        result,
+    )
+    if err != nil {
+        fmt.Printf("Error in main invocation: %v\n", err)
+    } else {
+        fmt.Println("Main invocation successful")
+    }
+    return res, err
 }
+
+
+// Helper function to extract all invocation function names from a JSON
+func extractInvocations(jsonContent []byte) []string {
+    var data map[string]interface{}
+    invocations := []string{}
+
+    err := json.Unmarshal(jsonContent, &data)
+    if err != nil {
+        fmt.Printf("Error unmarshaling JSON: %v\n", err)
+        // Try to print the problematic JSON for debugging
+        if len(jsonContent) > 100 {
+            fmt.Printf("JSON content (first 100 bytes): %s\n", string(jsonContent[:100]))
+        } else {
+            fmt.Printf("JSON content: %s\n", string(jsonContent))
+        }
+        return invocations
+    }
+
+    traverseAndFindInvocations(data, &invocations)
+    return invocations
+}
+
+// Recursively traverse the JSON to find all invocations
+func traverseAndFindInvocations(node interface{}, invocations *[]string) {
+    switch n := node.(type) {
+    case map[string]interface{}:
+        // Check if this is an invocation node
+        if dataValue, ok := n["data"].(string); ok && dataValue == "invocation" {
+            if children, ok := n["children"].([]interface{}); ok && len(children) > 0 {
+                // The first child should be the function name
+                if functionName, ok := children[0].(string); ok {
+                    fmt.Printf("Found invocation: %s\n", functionName)
+                    *invocations = append(*invocations, functionName)
+                } else {
+                    fmt.Printf("Found invocation but function name is not a string: %v\n", children[0])
+                }
+            } else {
+                fmt.Printf("Found invocation node but children is invalid or empty\n")
+            }
+        }
+
+        // Continue traversing all fields
+        for _, value := range n {
+            traverseAndFindInvocations(value, invocations)
+        }
+
+    case []interface{}:
+        // Traverse array elements
+        for _, item := range n {
+            traverseAndFindInvocations(item, invocations)
+        }
+    }
+}
+
+// Function to get the content of an action
+func getActionContent(qualifiedName QualifiedName) ([]byte, error) {
+    fmt.Printf("Getting content for action: %s\n", qualifiedName.GetEntityName())
+
+    action, _, err := Client.Actions.Get(qualifiedName.GetEntityName(), true)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get action: %v", err)
+    }
+
+    fmt.Printf("Action retrieved, checking code...\n")
+
+    if action.Exec == nil {
+        return nil, fmt.Errorf("action %q has no exec info", qualifiedName.GetEntityName())
+    }
+
+    if action.Exec.Code == nil {
+        return nil, fmt.Errorf("action %q has no code", qualifiedName.GetEntityName())
+    }
+
+    fmt.Printf("Action code length: %d\n", len(*action.Exec.Code))
+    return []byte(*action.Exec.Code), nil
+}
+
+// Function to determine if this is a dagular action
+func isDagularAction(actionName string) bool {
+    // First try the basic detection
+    isDagular := strings.HasSuffix(actionName, ".json") || strings.Contains(actionName, "dagular")
+
+    // If it's not detected as dagular by name, try to get the action and check its content
+    if !isDagular {
+        fmt.Printf("Action name doesn't indicate dagular, checking content...\n")
+
+        // Try to get the action
+        action, _, err := Client.Actions.Get(actionName, true)
+        if err != nil {
+            fmt.Printf("Error fetching action: %v\n", err)
+            return false
+        }
+
+        // Check if it has code
+        if action.Exec != nil && action.Exec.Code != nil {
+            // Try to parse the code as JSON
+            var jsonData map[string]interface{}
+            err = json.Unmarshal([]byte(*action.Exec.Code), &jsonData)
+
+            // If it parses as JSON and has the dagular structure, consider it a dagular action
+            if err == nil {
+                // Check for dagular structure (has "data" and "children" fields)
+                if _, hasData := jsonData["data"]; hasData {
+                    if _, hasChildren := jsonData["children"]; hasChildren {
+                        fmt.Printf("Action content is valid JSON with dagular structure\n")
+                        isDagular = true
+                    }
+                }
+            }
+        }
+    }
+
+    fmt.Printf("Checking if %s is a dagular action: %v\n", actionName, isDagular)
+    return isDagular
+}
+
 
 func printInvocationResponse(
 	qualifiedName QualifiedName,
@@ -1398,6 +1598,7 @@ func init() {
 	actionInvokeCmd.Flags().StringVarP(&Flags.common.paramFile, "param-file", "P", "", wski18n.T("`FILE` containing parameter values in JSON format"))
 	actionInvokeCmd.Flags().BoolVarP(&Flags.common.blocking, "blocking", "b", false, wski18n.T("blocking invoke"))
 	actionInvokeCmd.Flags().BoolVarP(&Flags.action.result, "result", "r", false, wski18n.T("blocking invoke; show only activation result (unless there is a failure)"))
+	actionInvokeCmd.Flags().BoolVarP(&Flags.action.prewarm, "prewarm", "w", false, wski18n.T("pre-warm any downstream Dagular action invocations before running the main action"))
 
 	actionGetCmd.Flags().BoolVarP(&Flags.common.summary, "summary", "s", false, wski18n.T("summarize action details; parameters with prefix \"*\" are bound, \"**\" are bound and finalized"))
 	actionGetCmd.Flags().BoolVarP(&Flags.action.url, "url", "r", false, wski18n.T("get action url"))
