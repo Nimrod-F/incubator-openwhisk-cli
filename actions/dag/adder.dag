@@ -1,0 +1,11 @@
+// 1. Define a curried add function
+let add = \x -> \y -> x + y
+
+// 2. Partially apply add with 2
+let add2 = add(10)
+
+// 3. Apply add2 to 3
+let sum = add2(3)
+
+// 4. Return the result in a dict
+return { sum: sum }

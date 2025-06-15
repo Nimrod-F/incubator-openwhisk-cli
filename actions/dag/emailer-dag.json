@@ -151,18 +151,28 @@
               ]
             },
             {
-              "data": "apply",
+              "data": "block_expr",
               "children": [
                 {
-                  "data": "id",
+                  "data": "return",
                   "children": [
-                    "welcomeEmail"
-                  ]
-                },
-                {
-                  "data": "id",
-                  "children": [
-                    "u"
+                    {
+                      "data": "apply",
+                      "children": [
+                        {
+                          "data": "id",
+                          "children": [
+                            "welcomeEmail"
+                          ]
+                        },
+                        {
+                          "data": "id",
+                          "children": [
+                            "u"
+                          ]
+                        }
+                      ]
+                    }
                   ]
                 }
               ]

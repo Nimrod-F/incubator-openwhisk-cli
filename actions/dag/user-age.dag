@@ -1,0 +1,7 @@
+let currentUser = /_/current_user(q_number: "QXZ5H95")
+
+return if currentUser["age"] > 17 {
+  return /_/functionA()
+} else {
+  return /_/functionB()
+}

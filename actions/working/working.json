@@ -9,7 +9,7 @@
           "data": "pair",
           "children": [
             { "data": "id",     "children": [ "name"  ] },
-            { "data": "string", "children": [ "Alice" ] }
+            { "data": "id", "children": [ "name" ] }
           ]
         }
       ]

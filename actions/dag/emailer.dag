@@ -1,0 +1,24 @@
+// 1. Define a two-arg emailer lambda
+let emailer = \template -> \user ->
+  /_/sendEmail(
+    to: user,
+    template: template
+  )
+
+// 2. Partially apply it to your welcome template
+let welcomeEmail = emailer("welcomeTemplate")
+
+// 3. Your list of recipient addresses
+let users = [
+  "alice@example.com",
+  "bob@example.com",
+  "carol@example.com"
+]
+
+// 4. Send each one a welcome email
+let results = map u in users {
+  return welcomeEmail(u)
+}
+
+// 5. Return all activation results
+return results

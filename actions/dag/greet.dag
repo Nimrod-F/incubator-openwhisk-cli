@@ -1,0 +1,5 @@
+let greet = \n -> /_/hello(name: n)
+
+let greeting = greet("Daniel")
+
+return greeting

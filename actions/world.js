@@ -1,7 +1,8 @@
 function main(params) {
+    const greeting = params.msg || { message: "stranger" };
     return {
         output: {
-            message: (params.msg || "stranger") + ", world!"
+            message: greeting.message + ", world!"
         }
     };
 }
