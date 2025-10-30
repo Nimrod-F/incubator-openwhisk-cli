@@ -1,0 +1,3 @@
+let x = /_/slow3()
+let y = /_/slow2()
+return [x, y]

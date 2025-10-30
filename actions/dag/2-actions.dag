@@ -1,2 +1,2 @@
-greeting = /_/hello(name: "Dani")
+greeting = /_/hello(name: "Daniel")
 return /_/world(msg: greeting)

@@ -1,0 +1,63 @@
+{
+    "data": "block_expr",
+    "children": [
+        {
+            "data": "return",
+            "children": [
+                {
+                    "data": "list",
+                    "children": [
+                        {
+                            "data": "invocation",
+                            "children": [
+                                "/_/slow3",
+                                {
+                                    "data": "dict",
+                                    "children": []
+                                }
+                            ]
+                        },
+                        {
+                            "data": "invocation",
+                            "children": [
+                                "/_/slow2",
+                                {
+                                    "data": "dict",
+                                    "children": []
+                                }
+                            ]
+                        },
+                        {
+                            "data": "invocation",
+                            "children": [
+                                "/_/hello",
+                                {
+                                    "data": "dict",
+                                    "children": [
+                                        {
+                                            "data": "pair",
+                                            "children": [
+                                                {
+                                                    "data": "id",
+                                                    "children": [
+                                                        "name"
+                                                    ]
+                                                },
+                                                {
+                                                    "data": "string",
+                                                    "children": [
+                                                        "parallel world"
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -34,9 +34,9 @@ for entry in "${ACTIONS[@]}"; do
   echo "Creating $action_type action: $action_name from $action_path"
 
   if [ "$action_type" = "dagular" ]; then
-    wsk action create --dagular "$action_name" "$action_path"
+    ../wsk action create --dagular "$action_name" "$action_path"
   else
-    wsk action create "$action_name" "$action_path"
+    ../wsk action create "$action_name" "$action_path"
   fi
 
   if [ $? -eq 0 ]; then

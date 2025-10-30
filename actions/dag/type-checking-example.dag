@@ -1,0 +1,120 @@
+// Example demonstrating gradual typing in Dagular (Option 5)
+// This shows how the system knows "hello expects name: string"
+
+// ═══════════════════════════════════════════════════════════════════════════
+// METHOD 1: Using Schema Registry (action-schema.json)
+// ═══════════════════════════════════════════════════════════════════════════
+// The compiler reads action-schema.json and finds:
+// "/_/hello": { "parameters": { "name": { "type": "string", "required": true } } }
+
+// ✅ This works - passing string to hello(name: string)
+greeting1 = hello(name: "Dan")
+
+// ❌ This fails in strict mode - passing number to hello(name: string)
+// let age = 25
+// greeting2 = hello(name: age)  // ERROR: Expected string, got number
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// METHOD 2: Inline Type Declarations (Pure Option 5)
+// ═══════════════════════════════════════════════════════════════════════════
+// Declare function signatures directly in the DAG file
+
+declare hello: (name: string) => string
+declare world: (msg: string) => string
+declare sendEmail: (to: string, subject: string, body?: string) => object
+
+// Now the compiler knows the types without needing action-schema.json
+
+// ✅ This works
+let userName = "Alice"
+result1 = hello(name: userName)
+
+// ❌ This fails - type mismatch
+// let userAge = 30
+// result2 = hello(name: userAge)  // ERROR: Expected string, got number
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// METHOD 3: Type Annotations on Variables
+// ═══════════════════════════════════════════════════════════════════════════
+
+let name: string = "Bob"      // Variable has explicit type
+let count: number = 42        // Another typed variable
+let active: boolean = true    // Boolean type
+
+// ✅ Type-checked and valid
+greeting3 = hello(name: name)
+
+// ❌ Would fail type check
+// greeting4 = hello(name: count)  // ERROR: Expected string, got number
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// METHOD 4: Type Inference
+// ═══════════════════════════════════════════════════════════════════════════
+// The compiler infers types from literal values
+
+let inferredString = "Charlie"  // Type inferred as string
+let inferredNumber = 100        // Type inferred as number
+let inferredBool = false        // Type inferred as boolean
+
+// ✅ Type inference + schema checking
+greeting5 = hello(name: inferredString)  // OK: inferred as string
+
+// ❌ Would fail
+// greeting6 = hello(name: inferredNumber)  // ERROR: inferred as number
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PRACTICAL EXAMPLE: Email Workflow with Type Safety
+// ═══════════════════════════════════════════════════════════════════════════
+
+#strict  // Enable strict type checking
+
+// Get input parameters (types from schema or context)
+let recipientEmail: string = input["email"]
+let userName: string = input["name"] 
+let userAge: number = input["age"]
+
+// ✅ Correct usage - all parameters match expected types
+personalGreeting = hello(name: userName)
+
+// Build email content
+emailResult = sendEmail(
+    to: recipientEmail,       // ✅ string
+    subject: personalGreeting, // ✅ string (return type of hello)
+    body: "Welcome!"          // ✅ string (optional parameter)
+)
+
+// ❌ Common mistakes that would be caught:
+// badGreeting = hello(name: userAge)  // ERROR: number instead of string
+// badEmail = sendEmail(to: userName, subject: 123)  // ERROR: number instead of string
+// missingParam = sendEmail(to: recipientEmail)  // ERROR: missing required 'subject'
+
+return emailResult
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADVANCED: Complex Type Checking
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Type checking with conditionals
+let status: string = if userAge >= 18 {
+    "adult"
+} else {
+    "minor"
+}
+
+// Type checking with expressions
+let fullName: string = input["firstName"] + " " + input["lastName"]
+userGreeting = hello(name: fullName)  // ✅ string concatenation
+
+// Type checking with function returns
+let message: string = hello(name: "Test")  // Return type is string
+finalResult = world(msg: message)  // ✅ Passing string to world(msg: string)
+
+// ❌ Type mismatch in conditional
+// let badConditional: string = if active { 123 } else { "text" }  // ERROR: mixed types
+
+return finalResult

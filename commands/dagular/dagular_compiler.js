@@ -11,61 +11,61 @@ class DagularCompiler {
   tokenize(source) {
     const tokenPatterns = [
       // Skip whitespace and comments
-      { type: 'WHITESPACE',    regex: /^\s+/ },
-      { type: 'COMMENT',       regex: /^\/\/.*/ },
-      { type: 'COMMENT',       regex: /^\/\*[\s\S]*?\*\// },
+      { type: "WHITESPACE", regex: /^\s+/ },
+      { type: "COMMENT", regex: /^\/\/.*/ },
+      { type: "COMMENT", regex: /^\/\*[\s\S]*?\*\// },
 
       // Keywords (order matters - longer first)
-      { type: 'RETURN',        regex: /^return\b/ },
-      { type: 'LET',           regex: /^let\b/ },
-      { type: 'IF',            regex: /^if\b/ },
-      { type: 'ELSE',          regex: /^else\b/ },
-      { type: 'MAP',           regex: /^map\b/ },
-      { type: 'IN',            regex: /^in\b/ },
-      { type: 'TRUE',          regex: /^true\b/ },
-      { type: 'FALSE',         regex: /^false\b/ },
-      { type: 'NOT',           regex: /^not\b/ },
-      { type: 'AND',           regex: /^and\b/ },
-      { type: 'OR',            regex: /^or\b/ },
+      { type: "RETURN", regex: /^return\b/ },
+      { type: "LET", regex: /^let\b/ },
+      { type: "IF", regex: /^if\b/ },
+      { type: "ELSE", regex: /^else\b/ },
+      { type: "MAP", regex: /^map\b/ },
+      { type: "IN", regex: /^in\b/ },
+      { type: "TRUE", regex: /^true\b/ },
+      { type: "FALSE", regex: /^false\b/ },
+      { type: "NOT", regex: /^not\b/ },
+      { type: "AND", regex: /^and\b/ },
+      { type: "OR", regex: /^or\b/ },
 
       // Literals
-      { type: 'NUMBER',        regex: /^\d+(\.\d+)?([eE][+-]?\d+)?/ },
-      { type: 'STRING',        regex: /^"([^"\\]|\\.)*"/ },
-      { type: 'STRING',        regex: /^'([^'\\]|\\.)*'/ },
+      { type: "NUMBER", regex: /^\d+(\.\d+)?([eE][+-]?\d+)?/ },
+      { type: "STRING", regex: /^"([^"\\]|\\.)*"/ },
+      { type: "STRING", regex: /^'([^'\\]|\\.)*'/ },
 
       // Action paths
-      { type: 'ACTION_PATH',   regex: /^\/[a-zA-Z0-9_\/-]+/ },
+      { type: "ACTION_PATH", regex: /^\/[a-zA-Z0-9_\/-]+/ },
 
       // Operators (longer first)
-      { type: 'LAMBDA',        regex: /^\\/ },
-      { type: 'ARROW',         regex: /^->/ },
-      { type: 'EQ',            regex: /^==/ },
-      { type: 'NE',            regex: /^!=/ },
-      { type: 'LE',            regex: /^<=/ },
-      { type: 'GE',            regex: /^>=/ },
-      { type: 'LT',            regex: /^</ },
-      { type: 'GT',            regex: /^>/ },
-      { type: 'ASSIGN',        regex: /^=/ },
-      { type: 'PLUS',          regex: /^\+/ },
-      { type: 'MINUS',         regex: /^-/ },
-      { type: 'MULT',          regex: /^\*/ },
-      { type: 'DIV',           regex: /^\// },
-      { type: 'MOD',           regex: /^%/ },
+      { type: "LAMBDA", regex: /^\\/ },
+      { type: "ARROW", regex: /^->/ },
+      { type: "EQ", regex: /^==/ },
+      { type: "NE", regex: /^!=/ },
+      { type: "LE", regex: /^<=/ },
+      { type: "GE", regex: /^>=/ },
+      { type: "LT", regex: /^</ },
+      { type: "GT", regex: /^>/ },
+      { type: "ASSIGN", regex: /^=/ },
+      { type: "PLUS", regex: /^\+/ },
+      { type: "MINUS", regex: /^-/ },
+      { type: "MULT", regex: /^\*/ },
+      { type: "DIV", regex: /^\// },
+      { type: "MOD", regex: /^%/ },
 
       // Delimiters
-      { type: 'LPAREN',        regex: /^\(/ },
-      { type: 'RPAREN',        regex: /^\)/ },
-      { type: 'LBRACE',        regex: /^\{/ },
-      { type: 'RBRACE',        regex: /^\}/ },
-      { type: 'LBRACKET',      regex: /^\[/ },
-      { type: 'RBRACKET',      regex: /^\]/ },
-      { type: 'COMMA',         regex: /^,/ },
-      { type: 'COLON',         regex: /^:/ },
-      { type: 'SEMICOLON',     regex: /^;/ },
-      { type: 'DOT',           regex: /^\./ },
+      { type: "LPAREN", regex: /^\(/ },
+      { type: "RPAREN", regex: /^\)/ },
+      { type: "LBRACE", regex: /^\{/ },
+      { type: "RBRACE", regex: /^\}/ },
+      { type: "LBRACKET", regex: /^\[/ },
+      { type: "RBRACKET", regex: /^\]/ },
+      { type: "COMMA", regex: /^,/ },
+      { type: "COLON", regex: /^:/ },
+      { type: "SEMICOLON", regex: /^;/ },
+      { type: "DOT", regex: /^\./ },
 
       // Identifiers (last)
-      { type: 'IDENTIFIER',    regex: /^[a-zA-Z_][a-zA-Z0-9_]*/ },
+      { type: "IDENTIFIER", regex: /^[a-zA-Z_][a-zA-Z0-9_]*/ },
     ];
 
     this.tokens = [];
@@ -79,11 +79,11 @@ class DagularCompiler {
         const match = remaining.match(pattern.regex);
         if (match) {
           // Skip whitespace and comments
-          if (pattern.type !== 'WHITESPACE' && pattern.type !== 'COMMENT') {
+          if (pattern.type !== "WHITESPACE" && pattern.type !== "COMMENT") {
             this.tokens.push({
               type: pattern.type,
               value: match[0],
-              pos: pos
+              pos: pos,
             });
           }
           pos += match[0].length;
@@ -93,7 +93,9 @@ class DagularCompiler {
       }
 
       if (!matched) {
-        throw new Error(`Unexpected character '${source[pos]}' at position ${pos}`);
+        throw new Error(
+          `Unexpected character '${source[pos]}' at position ${pos}`
+        );
       }
     }
 
@@ -102,14 +104,14 @@ class DagularCompiler {
 
   // ─── Parser Utilities ────────────────────────────────────────────────────────
   peek() {
-    return this.tokens[this.current] || { type: 'EOF', value: '' };
+    return this.tokens[this.current] || { type: "EOF", value: "" };
   }
 
   advance() {
     if (this.current < this.tokens.length) {
       return this.tokens[this.current++];
     }
-    return { type: 'EOF', value: '' };
+    return { type: "EOF", value: "" };
   }
 
   check(type) {
@@ -131,7 +133,9 @@ class DagularCompiler {
       return this.advance();
     }
     const current = this.peek();
-    throw new Error(`${message}. Expected ${type}, got ${current.type} ('${current.value}')`);
+    throw new Error(
+      `${message}. Expected ${type}, got ${current.type} ('${current.value}')`
+    );
   }
 
   isAtEnd() {
@@ -146,7 +150,7 @@ class DagularCompiler {
   createNode(data, children = []) {
     return {
       data: data,
-      children: children
+      children: children,
     };
   }
 
@@ -158,7 +162,7 @@ class DagularCompiler {
 
       if (this.tokens.length === 0) {
         // Empty program returns empty object
-        return this.createNode('dict', []);
+        return this.createNode("dict", []);
       }
 
       const ast = this.parseProgram();
@@ -172,13 +176,17 @@ class DagularCompiler {
   parseProgram() {
     // A program is either a single expression or a block with assignments
     if (this.isBlockStart()) {
-      return this.parseBlockExpression();
+      return this.parseBlockExpressionWithOptimization();
     } else {
-      // Single expression - wrap in a return
-      const expr = this.parseExpression();
-      return this.createNode('block_expr', [
-        this.createNode('return', [expr])
-      ]);
+      // Check if we have multiple expressions (potential parallel invocations)
+      const expressions = this.parseMultipleExpressions();
+      if (expressions.length === 1) {
+        // Single expression - execute as statement (no automatic return)
+        return this.createExecutionBlock(expressions);
+      } else {
+        // Multiple expressions - optimize for parallel execution
+        return this.optimizeParallelExecution(expressions);
+      }
     }
   }
 
@@ -187,12 +195,14 @@ class DagularCompiler {
     let lookahead = this.current;
     while (lookahead < this.tokens.length) {
       const token = this.tokens[lookahead];
-      if (token.type === 'LET' || token.type === 'RETURN') {
+      if (token.type === "LET" || token.type === "RETURN") {
         return true;
       }
-      if (token.type === 'IDENTIFIER' &&
-          lookahead + 1 < this.tokens.length &&
-          this.tokens[lookahead + 1].type === 'ASSIGN') {
+      if (
+        token.type === "IDENTIFIER" &&
+        lookahead + 1 < this.tokens.length &&
+        this.tokens[lookahead + 1].type === "ASSIGN"
+      ) {
         return true;
       }
       lookahead++;
@@ -206,51 +216,150 @@ class DagularCompiler {
     const statements = [];
 
     while (!this.isAtEnd()) {
-      if (this.check('LET')) {
+      if (this.check("LET")) {
         statements.push(this.parseLetAssignment());
-      } else if (this.check('IDENTIFIER') && this.tokens[this.current + 1]?.type === 'ASSIGN') {
+      } else if (
+        this.check("IDENTIFIER") &&
+        this.tokens[this.current + 1]?.type === "ASSIGN"
+      ) {
         statements.push(this.parseBareAssignment());
-      } else if (this.check('RETURN')) {
+      } else if (this.check("RETURN")) {
         statements.push(this.parseReturn());
         break; // return ends the block
       } else {
-        // Final expression without return
+        // Parse expression as statement
         const expr = this.parseExpression();
-        statements.push(this.createNode('return', [expr]));
+        statements.push(expr);
+
+        // Continue parsing if there are more tokens and no explicit return
+        if (this.isAtEnd()) {
+          break;
+        }
+      }
+    }
+
+    return this.createNode("block_expr", statements);
+  }
+
+  parseBlockExpressionWithOptimization() {
+    // Use the regular block parsing, but keep the original behavior
+    // The optimization happens in the program-level parsing
+    return this.parseBlockExpression();
+  }
+
+  parseMultipleExpressions() {
+    const expressions = [];
+
+    while (!this.isAtEnd()) {
+      try {
+        const expr = this.parseExpression();
+        expressions.push(expr);
+        // If we've consumed all tokens, break
+        if (this.isAtEnd()) break;
+      } catch (error) {
+        // If parsing fails, stop and return what we have
         break;
       }
     }
 
-    return this.createNode('block_expr', statements);
+    return expressions;
+  }
+
+  parseConsecutiveInvocations() {
+    const invocations = [];
+
+    while (!this.isAtEnd() && this.isInvocationStart()) {
+      const expr = this.parseExpression();
+      if (this.isInvocation(expr)) {
+        invocations.push(expr);
+      } else {
+        // Not an invocation, put it back and stop
+        this.current--;
+        break;
+      }
+    }
+
+    return invocations;
+  }
+
+  isInvocationStart() {
+    // Check if the current token sequence looks like the start of an invocation
+    return (
+      this.check("ACTION_PATH") ||
+      (this.check("IDENTIFIER") &&
+        this.tokens[this.current + 1]?.type === "LPAREN")
+    );
+  }
+
+  isInvocation(expr) {
+    // Check if an expression is an invocation
+    return expr && expr.data === "invocation";
+  }
+
+  optimizeParallelExecution(expressions) {
+    // Check if ALL expressions are invocations
+    const allInvocations = expressions.every((expr) => this.isInvocation(expr));
+
+    if (allInvocations && expressions.length > 1) {
+      // All expressions are invocations - create parallel execution (no return)
+      return this.createNode("block_expr", [
+        this.createNode("list", expressions),
+      ]);
+    } else {
+      // Mixed expressions or single expression - execute as statements
+      return this.createExecutionBlock(expressions);
+    }
+  }
+
+  createExecutionBlock(expressions) {
+    // Create a block that executes statements without automatic returns
+    const statements = [];
+
+    for (const expr of expressions) {
+      if (this.isInvocation(expr)) {
+        // Function invocations become execution statements
+        statements.push(expr);
+      } else {
+        // Non-invocations (like assignments) are added as-is
+        statements.push(expr);
+      }
+    }
+
+    // If we only have one statement and it's not an invocation, wrap it appropriately
+    if (statements.length === 1 && !this.isInvocation(statements[0])) {
+      return this.createNode("block_expr", statements);
+    }
+
+    return this.createNode("block_expr", statements);
   }
 
   parseLetAssignment() {
-    this.consume('LET', "Expected 'let'");
-    const name = this.consume('IDENTIFIER', "Expected variable name");
-    this.consume('ASSIGN', "Expected '='");
+    this.consume("LET", "Expected 'let'");
+    const name = this.consume("IDENTIFIER", "Expected variable name");
+    this.consume("ASSIGN", "Expected '='");
     const expr = this.parseExpression();
 
-    return this.createNode('assign', [
-      this.createNode('id', [name.value]),
-      expr
+    return this.createNode("assign", [
+      this.createNode("id", [name.value]),
+      expr,
     ]);
   }
 
   parseBareAssignment() {
-    const name = this.consume('IDENTIFIER', "Expected variable name");
-    this.consume('ASSIGN', "Expected '='");
+    const name = this.consume("IDENTIFIER", "Expected variable name");
+    this.consume("ASSIGN", "Expected '='");
     const expr = this.parseExpression();
 
-    return this.createNode('assign', [
-      this.createNode('id', [name.value]),
-      expr
+    return this.createNode("assign", [
+      this.createNode("id", [name.value]),
+      expr,
     ]);
   }
 
   parseReturn() {
-    this.consume('RETURN', "Expected 'return'");
+    this.consume("RETURN", "Expected 'return'");
     const expr = this.parseExpression();
-    return this.createNode('return', [expr]);
+    return this.createNode("return", [expr]);
   }
 
   // ─── Expression Parsing (Precedence Climbing) ────────────────────────────────
@@ -261,9 +370,9 @@ class DagularCompiler {
   parseLogicalOr() {
     let expr = this.parseLogicalAnd();
 
-    while (this.match('OR')) {
+    while (this.match("OR")) {
       const right = this.parseLogicalAnd();
-      expr = this.createNode('binop', [expr, 'or', right]);
+      expr = this.createNode("binop", [expr, "or", right]);
     }
 
     return expr;
@@ -272,9 +381,9 @@ class DagularCompiler {
   parseLogicalAnd() {
     let expr = this.parseEquality();
 
-    while (this.match('AND')) {
+    while (this.match("AND")) {
       const right = this.parseEquality();
-      expr = this.createNode('binop', [expr, 'and', right]);
+      expr = this.createNode("binop", [expr, "and", right]);
     }
 
     return expr;
@@ -283,10 +392,10 @@ class DagularCompiler {
   parseEquality() {
     let expr = this.parseComparison();
 
-    while (this.match('EQ', 'NE')) {
+    while (this.match("EQ", "NE")) {
       const operator = this.previous().value;
       const right = this.parseComparison();
-      expr = this.createNode('binop', [expr, operator, right]);
+      expr = this.createNode("binop", [expr, operator, right]);
     }
 
     return expr;
@@ -295,10 +404,10 @@ class DagularCompiler {
   parseComparison() {
     let expr = this.parseAddition();
 
-    while (this.match('GT', 'GE', 'LT', 'LE')) {
+    while (this.match("GT", "GE", "LT", "LE")) {
       const operator = this.previous().value;
       const right = this.parseAddition();
-      expr = this.createNode('binop', [expr, operator, right]);
+      expr = this.createNode("binop", [expr, operator, right]);
     }
 
     return expr;
@@ -307,10 +416,10 @@ class DagularCompiler {
   parseAddition() {
     let expr = this.parseMultiplication();
 
-    while (this.match('PLUS', 'MINUS')) {
+    while (this.match("PLUS", "MINUS")) {
       const operator = this.previous().value;
       const right = this.parseMultiplication();
-      expr = this.createNode('binop', [expr, operator, right]);
+      expr = this.createNode("binop", [expr, operator, right]);
     }
 
     return expr;
@@ -319,64 +428,60 @@ class DagularCompiler {
   parseMultiplication() {
     let expr = this.parseUnary();
 
-    while (this.match('MULT', 'DIV', 'MOD')) {
+    while (this.match("MULT", "DIV", "MOD")) {
       const operator = this.previous().value;
       const right = this.parseUnary();
-      expr = this.createNode('binop', [expr, operator, right]);
+      expr = this.createNode("binop", [expr, operator, right]);
     }
 
     return expr;
   }
 
   parseUnary() {
-    if (this.match('NOT', 'MINUS')) {
+    if (this.match("NOT", "MINUS")) {
       const operator = this.previous();
-      const operatorStr = operator.type === 'NOT' ? 'not' : '-';
+      const operatorStr = operator.type === "NOT" ? "not" : "-";
       const right = this.parseUnary();
-      return this.createNode('unop', [operatorStr, right]);
+      return this.createNode("unop", [operatorStr, right]);
     }
 
     return this.parsePostfix();
   }
 
-// ─── Postfix (indexing & invocation & apply) ────────────────────────────────
+  // ─── Postfix (indexing & invocation & apply) ────────────────────────────────
   parsePostfix() {
     let expr = this.parsePrimary();
 
     while (true) {
       // 1) Indexing
-      if (this.match('LBRACKET')) {
+      if (this.match("LBRACKET")) {
         const indexExpr = this.parseExpression();
-        this.consume('RBRACKET', "Expected ']' after index");
-        expr = this.createNode('index', [expr, indexExpr]);
+        this.consume("RBRACKET", "Expected ']' after index");
+        expr = this.createNode("index", [expr, indexExpr]);
 
         // 2) Generic invocation / apply
-      } else if (this.match('LPAREN')) {
+      } else if (this.match("LPAREN")) {
         const argsNode = this.parseArguments();
-        this.consume('RPAREN', "Expected ')' after arguments");
+        this.consume("RPAREN", "Expected ')' after arguments");
 
         // a) Built-in action
-        if (expr.data === 'id' &&
-            typeof expr.children[0] === 'string' &&
-            expr.children[0].startsWith('/')) {
-          expr = this.createNode('invocation', [
-            expr.children[0],  // the path string
-            argsNode           // dict of named params or list
+        if (
+          expr.data === "id" &&
+          typeof expr.children[0] === "string" &&
+          expr.children[0].startsWith("/")
+        ) {
+          expr = this.createNode("invocation", [
+            expr.children[0], // the path string
+            argsNode, // dict of named params or list
           ]);
 
           // b) User-defined function or lambda
         } else {
           // unwrap single-item lists into a raw arg
-          if (argsNode.data === 'list' && argsNode.children.length === 1) {
-            expr = this.createNode('apply', [
-              expr,
-              argsNode.children[0]
-            ]);
+          if (argsNode.data === "list" && argsNode.children.length === 1) {
+            expr = this.createNode("apply", [expr, argsNode.children[0]]);
           } else {
-            expr = this.createNode('apply', [
-              expr,
-              argsNode
-            ]);
+            expr = this.createNode("apply", [expr, argsNode]);
           }
         }
 
@@ -390,190 +495,193 @@ class DagularCompiler {
   }
 
   parseArguments() {
-    if (this.check('RPAREN')) {
+    if (this.check("RPAREN")) {
       // no args → empty dict
-      return this.createNode('dict', []);
+      return this.createNode("dict", []);
     }
 
     const children = [];
 
     // if it looks like named args (ident COLON), keep your old logic:
-    if (this.check('IDENTIFIER') && this.tokens[this.current + 1]?.type === 'COLON') {
+    if (
+      this.check("IDENTIFIER") &&
+      this.tokens[this.current + 1]?.type === "COLON"
+    ) {
       // existing named‐pairs loop
       do {
-        const key = this.consume('IDENTIFIER', "Expected parameter name");
-        this.consume('COLON', "Expected ':' after parameter name");
+        const key = this.consume("IDENTIFIER", "Expected parameter name");
+        this.consume("COLON", "Expected ':' after parameter name");
         const value = this.parseExpression();
-        children.push(this.createNode('pair', [
-          this.createNode('id', [key.value]),
-          value
-        ]));
-      } while (this.match('COMMA'));
-      return this.createNode('dict', children);
+        children.push(
+          this.createNode("pair", [this.createNode("id", [key.value]), value])
+        );
+      } while (this.match("COMMA"));
+      return this.createNode("dict", children);
     }
 
     // otherwise, positional arguments — collect expressions:
     do {
       children.push(this.parseExpression());
-    } while (this.match('COMMA'));
+    } while (this.match("COMMA"));
 
     // represent as a special “args” node (or reuse list):
-    return this.createNode('list', children);
+    return this.createNode("list", children);
   }
-
 
   parsePrimary() {
     // Boolean literals
-    if (this.match('TRUE')) {
-      return this.createNode('id', ['true']);
+    if (this.match("TRUE")) {
+      return this.createNode("id", ["true"]);
     }
 
-    if (this.match('FALSE')) {
-      return this.createNode('id', ['false']);
+    if (this.match("FALSE")) {
+      return this.createNode("id", ["false"]);
     }
 
     // Numbers
-    if (this.match('NUMBER')) {
+    if (this.match("NUMBER")) {
       const value = parseFloat(this.previous().value);
-      return this.createNode('number', [value]);
+      return this.createNode("number", [value]);
     }
 
     // Strings
-    if (this.match('STRING')) {
+    if (this.match("STRING")) {
       const raw = this.previous().value;
       // Remove quotes and handle escape sequences
       const value = raw.slice(1, -1).replace(/\\(.)/g, (_, char) => {
         switch (char) {
-          case 'n': return '\n';
-          case 't': return '\t';
-          case 'r': return '\r';
-          case '\\': return '\\';
-          case '"': return '"';
-          case "'": return "'";
-          default: return char;
+          case "n":
+            return "\n";
+          case "t":
+            return "\t";
+          case "r":
+            return "\r";
+          case "\\":
+            return "\\";
+          case '"':
+            return '"';
+          case "'":
+            return "'";
+          default:
+            return char;
         }
       });
-      return this.createNode('string', [value]);
+      return this.createNode("string", [value]);
     }
 
     // Identifiers and action paths
-    if (this.match('ACTION_PATH', 'IDENTIFIER')) {
-      return this.createNode('id', [this.previous().value]);
+    if (this.match("ACTION_PATH", "IDENTIFIER")) {
+      return this.createNode("id", [this.previous().value]);
     }
 
     // Arrays
-    if (this.match('LBRACKET')) {
+    if (this.match("LBRACKET")) {
       const elements = [];
 
-      if (!this.check('RBRACKET')) {
+      if (!this.check("RBRACKET")) {
         do {
           elements.push(this.parseExpression());
-        } while (this.match('COMMA'));
+        } while (this.match("COMMA"));
       }
 
-      this.consume('RBRACKET', "Expected ']' after array elements");
-      return this.createNode('list', elements);
+      this.consume("RBRACKET", "Expected ']' after array elements");
+      return this.createNode("list", elements);
     }
 
     // Objects/Dictionaries
-    if (this.match('LBRACE')) {
+    if (this.match("LBRACE")) {
       const pairs = [];
 
-      if (!this.check('RBRACE')) {
+      if (!this.check("RBRACE")) {
         do {
-          const key = this.consume('IDENTIFIER', "Expected property name");
-          this.consume('COLON', "Expected ':' after property name");
+          const key = this.consume("IDENTIFIER", "Expected property name");
+          this.consume("COLON", "Expected ':' after property name");
           const value = this.parseExpression();
 
-          pairs.push(this.createNode('pair', [
-            this.createNode('id', [key.value]),
-            value
-          ]));
-        } while (this.match('COMMA'));
+          pairs.push(
+            this.createNode("pair", [this.createNode("id", [key.value]), value])
+          );
+        } while (this.match("COMMA"));
       }
 
-      this.consume('RBRACE', "Expected '}' after object properties");
-      return this.createNode('dict', pairs);
+      this.consume("RBRACE", "Expected '}' after object properties");
+      return this.createNode("dict", pairs);
     }
 
     // Parenthesized expressions
-    if (this.match('LPAREN')) {
+    if (this.match("LPAREN")) {
       const expr = this.parseExpression();
-      this.consume('RPAREN', "Expected ')' after expression");
+      this.consume("RPAREN", "Expected ')' after expression");
       return expr;
     }
 
     // Control structures
-    if (this.check('IF')) {
+    if (this.check("IF")) {
       return this.parseIfExpression();
     }
 
-    if (this.check('MAP')) {
+    if (this.check("MAP")) {
       return this.parseMapExpression();
     }
 
-    if (this.check('LAMBDA')) {
+    if (this.check("LAMBDA")) {
       return this.parseLambdaExpression();
     }
 
-    throw new Error(`Unexpected token: ${this.peek().type} ('${this.peek().value}')`);
+    throw new Error(
+      `Unexpected token: ${this.peek().type} ('${this.peek().value}')`
+    );
   }
 
   parseIfExpression() {
-    this.consume('IF', "Expected 'if'");
+    this.consume("IF", "Expected 'if'");
     const condition = this.parseExpression();
-    this.consume('LBRACE', "Expected '{' after if condition");
+    this.consume("LBRACE", "Expected '{' after if condition");
     const thenBranch = this.parseBlockExpression();
-    this.consume('RBRACE', "Expected '}' after if body");
+    this.consume("RBRACE", "Expected '}' after if body");
 
-    let elseBranch = this.createNode('dict', []); // default empty else
+    let elseBranch = this.createNode("dict", []); // default empty else
 
-    if (this.match('ELSE')) {
-      this.consume('LBRACE', "Expected '{' after else");
+    if (this.match("ELSE")) {
+      this.consume("LBRACE", "Expected '{' after else");
       elseBranch = this.parseBlockExpression();
-      this.consume('RBRACE', "Expected '}' after else body");
+      this.consume("RBRACE", "Expected '}' after else body");
     }
 
-    return this.createNode('if_expr', [condition, thenBranch, elseBranch]);
+    return this.createNode("if_expr", [condition, thenBranch, elseBranch]);
   }
 
-// ─── Flexible map‐body support ───────────────────────────────────────────────
+  // ─── Flexible map‐body support ───────────────────────────────────────────────
   parseMapExpression() {
-    this.consume('MAP', "Expected 'map'");
-    const variable = this.consume('IDENTIFIER', "Expected variable name");
-    this.consume('IN', "Expected 'in'");
+    this.consume("MAP", "Expected 'map'");
+    const variable = this.consume("IDENTIFIER", "Expected variable name");
+    this.consume("IN", "Expected 'in'");
     const iterable = this.parseExpression();
 
     let bodyNode;
-    if (this.match('LBRACE')) {
+    if (this.match("LBRACE")) {
       // { … } case
       bodyNode = this.parseBlockExpression();
-      this.consume('RBRACE', "Expected '}' after map body");
+      this.consume("RBRACE", "Expected '}' after map body");
     } else {
       // inline‐expr case: use the expr directly as body
       bodyNode = this.parseExpression();
     }
 
-    return this.createNode('map_expr', [
-      variable.value,
-      iterable,
-      bodyNode
-    ]);
+    return this.createNode("map_expr", [variable.value, iterable, bodyNode]);
   }
 
-
   parseLambdaExpression() {
-    this.consume('LAMBDA', "Expected '\\'");
-    const param = this.consume('IDENTIFIER', "Expected parameter name");
-    this.consume('ARROW', "Expected '->' after lambda parameter");
+    this.consume("LAMBDA", "Expected '\\'");
+    const param = this.consume("IDENTIFIER", "Expected parameter name");
+    this.consume("ARROW", "Expected '->' after lambda parameter");
     const body = this.parseExpression();
 
-    return this.createNode('lambda', [param.value, body]);
+    return this.createNode("lambda", [param.value, body]);
   }
 }
 
-
 // Export for Node.js
-if (typeof module !== 'undefined' && module.exports) {
+if (typeof module !== "undefined" && module.exports) {
   module.exports = { DagularCompiler, compileDagular };
 }

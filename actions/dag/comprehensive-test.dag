@@ -1,0 +1,10 @@
+// Comprehensive test of new execution behavior
+let result = /_/initialize()
+
+// These will execute in parallel (no return)
+/_/process1(data: result)  
+/_/process2(data: result)
+/_/process3(data: result)
+
+// Explicit return
+return "All processing completed"

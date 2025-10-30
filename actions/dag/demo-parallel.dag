@@ -1,0 +1,6 @@
+// Example showing automatic parallel detection in Dagular
+// The following functions will be automatically executed in parallel:
+
+/_/slow3()
+/_/slow2()
+/_/hello(name: "parallel world")
