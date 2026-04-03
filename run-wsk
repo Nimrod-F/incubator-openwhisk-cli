@@ -1,0 +1,39 @@
+#!/usr/bin/env zsh
+# Lightweight wrapper to build and run the OpenWhisk CLI from the repo root.
+# Usage: ./run-wsk [wsk-args...]
+# - Ensures i18n generated assets exist (uses go-bindata if needed)
+# - Builds the binary (GO modules enabled)
+# - Runs the binary with forwarded args
+
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$REPO_ROOT"
+
+echo "[run-wsk] working dir: $REPO_ROOT"
+
+# Ensure i18n resources are available to avoid build errors
+if [ ! -f "wski18n/i18n_resources.go" ]; then
+  echo "[run-wsk] wski18n/i18n_resources.go not found. Generating with go-bindata..."
+  if ! command -v go-bindata >/dev/null 2>&1; then
+    echo "[run-wsk] go-bindata not found. Installing go-bindata..."
+    # Use Go install (Go 1.17+ style); GOPATH/bin should be in PATH for newer Go setups
+    go install github.com/go-bindata/go-bindata/v3/go-bindata@latest
+  fi
+  GBINDATA_BIN="$(command -v go-bindata || echo "$GOPATH/bin/go-bindata")"
+  if [ -z "$GBINDATA_BIN" ]; then
+    echo "[run-wsk] could not locate go-bindata binary. Please ensure it's installed and in PATH." >&2
+    exit 1
+  fi
+  echo "[run-wsk] generating wski18n/i18n_resources.go using $GBINDATA_BIN"
+  "$GBINDATA_BIN" -pkg wski18n -o wski18n/i18n_resources.go wski18n/resources
+fi
+
+# Build the binary
+echo "[run-wsk] building wsk binary..."
+# Keep modules ON for reproducible builds
+GO111MODULE=on go build -o wsk
+
+# Execute the binary with any given args
+echo "[run-wsk] executing ./wsk $*"
+exec ./wsk "$@"
+

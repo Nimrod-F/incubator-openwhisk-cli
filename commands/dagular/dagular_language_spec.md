@@ -13,12 +13,16 @@ Dagular is a domain-specific language (DSL) designed for expressing computations
 ```
 
 ### Keywords
+- `import` - Import actions from namespaces
 - `let` - Variable declaration
 - `return` - Return statement
 - `if` / `else` - Conditional expressions
 - `map` / `in` - Collection mapping
 - `true` / `false` - Boolean literals
 - `not` / `and` / `or` - Logical operators
+
+### Contextual Keywords
+- `from` - Used after import list to specify namespace (not a reserved keyword; can be used as a variable name)
 
 ### Literals
 
@@ -125,6 +129,58 @@ false       // Boolean
 ```
 
 ## Language Constructs
+
+### Import Statements
+
+Import statements allow you to call actions from specific namespaces without the full path prefix. They must appear at the top of the file, before any other statements.
+
+#### Basic Import
+```dagular
+import {hello} from myNamespace
+
+hello(name: "World")
+// Compiles to: /myNamespace/hello(name: "World")
+```
+
+#### Multiple Imports from Same Namespace
+```dagular
+import {sleep2, sleep3} from namespaceA
+
+sleep2()
+sleep3()
+// Compiles to: /namespaceA/sleep2(), /namespaceA/sleep3()
+```
+
+#### Imports from Different Namespaces
+```dagular
+import {sleep2} from namespaceA
+import {process} from namespaceB
+
+sleep2()
+process()
+hello()
+// Compiles to: /namespaceA/sleep2(), /namespaceB/process(), /_/hello()
+```
+
+#### Default Namespace Resolution
+Bare function names that are not imported automatically resolve to the default namespace `/_/`:
+```dagular
+hello(name: "World")
+// Compiles to: /_/hello(name: "World")
+```
+
+#### Backwards Compatibility
+Explicit action paths with `/` prefix still work:
+```dagular
+/_/hello(name: "World")
+/myNamespace/action(param: value)
+```
+
+#### Rules
+- Imports must appear at the top of the file
+- Duplicate import names across namespaces produce a compile error
+- `from` is a contextual keyword (can be used as a variable name elsewhere)
+- Local variables (defined via `let` or assignment) take precedence over action resolution
 
 ### Variable Declaration and Assignment
 

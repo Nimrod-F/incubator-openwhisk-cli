@@ -1,0 +1,6 @@
+import {sleep2} from namespaceA
+
+result1 = sleep2(name: "test")
+result2 = hello(name: "world")
+
+return [result1, result2]

@@ -60,18 +60,47 @@ class ActionValidator {
   }
 
   /**
-   * Extract action invocations from source code (before compilation)
+   * Extract action invocations from source code (before compilation).
+   * Import-aware: resolves bare imported names and unimported names to action paths.
    */
   extractActionInvocationsFromSource(source) {
     const invocations = new Set();
 
-    // Match patterns like: /_/actionName(...)
+    // 1. Match explicit action paths like: /_/actionName(...)
     const actionPattern = /\/([\w_\-\/]+)\s*\(/g;
     let match;
-
     while ((match = actionPattern.exec(source)) !== null) {
       const actionPath = "/" + match[1];
       invocations.add(actionPath);
+    }
+
+    // 2. Parse import statements
+    const imports = new Map();
+    const importPattern = /import\s*\{([^}]+)\}\s*from\s+(\w+)/g;
+    let importMatch;
+    while ((importMatch = importPattern.exec(source)) !== null) {
+      const names = importMatch[1].split(',').map(n => n.trim()).filter(n => n);
+      const namespace = importMatch[2];
+      for (const name of names) {
+        imports.set(name, `/${namespace}/${name}`);
+      }
+    }
+
+    // 3. Find bare identifier invocations and resolve
+    const bareCallPattern = /\b([a-zA-Z_]\w*)\s*\(/g;
+    const keywords = new Set([
+      'if', 'else', 'map', 'let', 'return', 'not', 'and', 'or',
+      'true', 'false', 'import', 'from'
+    ]);
+    let bareMatch;
+    while ((bareMatch = bareCallPattern.exec(source)) !== null) {
+      const name = bareMatch[1];
+      if (keywords.has(name)) continue;
+      if (imports.has(name)) {
+        invocations.add(imports.get(name));
+      } else {
+        invocations.add(`/_/${name}`);
+      }
     }
 
     return Array.from(invocations);

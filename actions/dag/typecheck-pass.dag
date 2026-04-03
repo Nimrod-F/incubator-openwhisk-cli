@@ -1,0 +1,7 @@
+// This file should PASS type checking
+// All parameter types match the schema
+
+let userName = "Alice"
+greeting = hello(name: userName)
+result = world(msg: greeting)
+return result

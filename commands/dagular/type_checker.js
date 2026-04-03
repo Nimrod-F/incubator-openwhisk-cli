@@ -396,13 +396,35 @@ class TypeChecker {
     }
   }
 
+  // ─── Import Parsing ─────────────────────────────────────────────────────────
+
+  /**
+   * Parse import statements from source code for path resolution.
+   * Returns a Map: functionName -> "/namespace/functionName"
+   */
+  parseImports(source) {
+    const imports = new Map();
+    const importPattern = /import\s*\{([^}]+)\}\s*from\s+(\w+)/g;
+    let match;
+    while ((match = importPattern.exec(source)) !== null) {
+      const names = match[1].split(',').map(n => n.trim()).filter(n => n);
+      const namespace = match[2];
+      for (const name of names) {
+        imports.set(name, `/${namespace}/${name}`);
+      }
+    }
+    return imports;
+  }
+
   // ─── Inline Type Declarations Parser ──────────────────────────────────────────
 
   /**
    * Parse type declarations from DAG source code
    * Example: declare hello: (name: string) => string
+   * Import-aware: resolves declared names via imports before defaulting to /_/
    */
   parseTypeDeclarations(source) {
+    const imports = this.parseImports(source);
     const lines = source.split("\n");
 
     lines.forEach((line) => {
@@ -414,7 +436,10 @@ class TypeChecker {
       );
       if (match) {
         const [, actionName, paramsStr, returnType] = match;
-        const actionPath = `/_/${actionName}`;
+        // Resolve action path: check imports first, then default to /_/
+        const actionPath = imports.has(actionName)
+          ? imports.get(actionName)
+          : `/_/${actionName}`;
 
         // Parse parameters
         const parameters = {};

@@ -1,0 +1,6 @@
+// This file should FAIL type checking
+// We pass a number where a string is expected
+
+let age = 25
+greeting = hello(name: age)
+return greeting

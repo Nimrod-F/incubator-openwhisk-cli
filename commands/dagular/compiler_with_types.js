@@ -63,6 +63,18 @@ class DagularCompilerWithTypes extends DagularCompiler {
     const declarations = new Map();
     const lines = source.split("\n");
 
+    // Parse imports for path resolution
+    const imports = new Map();
+    const importPattern = /import\s*\{([^}]+)\}\s*from\s+(\w+)/g;
+    let importMatch;
+    while ((importMatch = importPattern.exec(source)) !== null) {
+      const names = importMatch[1].split(',').map(n => n.trim()).filter(n => n);
+      const namespace = importMatch[2];
+      for (const name of names) {
+        imports.set(name, `/${namespace}/${name}`);
+      }
+    }
+
     lines.forEach((line, lineNum) => {
       const trimmed = line.trim();
 
@@ -77,7 +89,10 @@ class DagularCompilerWithTypes extends DagularCompiler {
       );
       if (match) {
         const [, actionName, paramsStr, returnType] = match;
-        const actionPath = `/_/${actionName}`;
+        // Resolve action path: check imports first, then default to /_/
+        const actionPath = imports.has(actionName)
+          ? imports.get(actionName)
+          : `/_/${actionName}`;
 
         // Parse parameters
         const parameters = {};

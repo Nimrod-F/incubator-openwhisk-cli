@@ -1,0 +1,5 @@
+// This file should FAIL type checking
+// Missing required parameter 'name' for hello
+
+greeting = hello()
+return greeting

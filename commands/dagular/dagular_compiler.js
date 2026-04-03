@@ -5,6 +5,8 @@ class DagularCompiler {
   constructor() {
     this.tokens = [];
     this.current = 0;
+    this.imports = new Map();        // functionName -> "/namespace/functionName"
+    this.localVariables = new Set(); // tracks let/assignment/lambda/map variable names
   }
 
   // ─── Tokenizer ────────────────────────────────────────────────────────────────
@@ -27,6 +29,7 @@ class DagularCompiler {
       { type: "NOT", regex: /^not\b/ },
       { type: "AND", regex: /^and\b/ },
       { type: "OR", regex: /^or\b/ },
+      { type: "IMPORT", regex: /^import\b/ },
 
       // Literals
       { type: "NUMBER", regex: /^\d+(\.\d+)?([eE][+-]?\d+)?/ },
@@ -154,14 +157,68 @@ class DagularCompiler {
     };
   }
 
+  // ─── Import System ──────────────────────────────────────────────────────────
+
+  // Parse a single import statement: import {name1, name2} from namespace
+  parseImportStatement() {
+    this.consume("IMPORT", "Expected 'import'");
+    this.consume("LBRACE", "Expected '{' after 'import'");
+
+    const names = [];
+    if (!this.check("RBRACE")) {
+      do {
+        const name = this.consume("IDENTIFIER", "Expected function name in import");
+        names.push(name.value);
+      } while (this.match("COMMA"));
+    }
+
+    this.consume("RBRACE", "Expected '}' after import names");
+
+    // 'from' is consumed contextually as an IDENTIFIER (not a keyword)
+    const fromToken = this.consume("IDENTIFIER", "Expected 'from' after import list");
+    if (fromToken.value !== "from") {
+      throw new Error(`Expected 'from', got '${fromToken.value}'`);
+    }
+
+    const namespace = this.consume("IDENTIFIER", "Expected namespace after 'from'");
+    return { names, namespace: namespace.value };
+  }
+
+  // Consume all top-level import statements and populate this.imports
+  processImports() {
+    this.imports = new Map();
+
+    while (!this.isAtEnd() && this.check("IMPORT")) {
+      const importData = this.parseImportStatement();
+
+      for (const name of importData.names) {
+        if (this.imports.has(name)) {
+          throw new Error(
+            `Duplicate import: '${name}' is already imported as '${this.imports.get(name)}'`
+          );
+        }
+        this.imports.set(name, `/${importData.namespace}/${name}`);
+      }
+    }
+  }
+
   // ─── Main Compiler Entry Point ───────────────────────────────────────────────
   compile(source) {
     try {
       this.tokenize(source);
       this.current = 0;
+      this.localVariables = new Set();
 
       if (this.tokens.length === 0) {
         // Empty program returns empty object
+        return this.createNode("dict", []);
+      }
+
+      // Process import statements before parsing the program body
+      this.processImports();
+
+      if (this.isAtEnd()) {
+        // File contained only imports and no program body
         return this.createNode("dict", []);
       }
 
@@ -336,6 +393,7 @@ class DagularCompiler {
   parseLetAssignment() {
     this.consume("LET", "Expected 'let'");
     const name = this.consume("IDENTIFIER", "Expected variable name");
+    this.localVariables.add(name.value);
     this.consume("ASSIGN", "Expected '='");
     const expr = this.parseExpression();
 
@@ -347,6 +405,7 @@ class DagularCompiler {
 
   parseBareAssignment() {
     const name = this.consume("IDENTIFIER", "Expected variable name");
+    this.localVariables.add(name.value);
     this.consume("ASSIGN", "Expected '='");
     const expr = this.parseExpression();
 
@@ -459,25 +518,40 @@ class DagularCompiler {
         this.consume("RBRACKET", "Expected ']' after index");
         expr = this.createNode("index", [expr, indexExpr]);
 
-        // 2) Generic invocation / apply
+        // 2) Generic invocation / apply with import resolution
       } else if (this.match("LPAREN")) {
         const argsNode = this.parseArguments();
         this.consume("RPAREN", "Expected ')' after arguments");
 
-        // a) Built-in action
         if (
           expr.data === "id" &&
-          typeof expr.children[0] === "string" &&
-          expr.children[0].startsWith("/")
+          typeof expr.children[0] === "string"
         ) {
-          expr = this.createNode("invocation", [
-            expr.children[0], // the path string
-            argsNode, // dict of named params or list
-          ]);
+          const name = expr.children[0];
 
-          // b) User-defined function or lambda
+          if (name.startsWith("/")) {
+            // a) Explicit action path (e.g., /_/hello) → invocation
+            expr = this.createNode("invocation", [name, argsNode]);
+
+          } else if (this.imports.has(name)) {
+            // b) Imported action name → resolve to imported path → invocation
+            expr = this.createNode("invocation", [this.imports.get(name), argsNode]);
+
+          } else if (this.localVariables.has(name)) {
+            // c) Local variable (lambda, let binding) → apply (function call)
+            if (argsNode.data === "list" && argsNode.children.length === 1) {
+              expr = this.createNode("apply", [expr, argsNode.children[0]]);
+            } else {
+              expr = this.createNode("apply", [expr, argsNode]);
+            }
+
+          } else {
+            // d) Bare unimported name → default namespace /_/name → invocation
+            expr = this.createNode("invocation", [`/_/${name}`, argsNode]);
+          }
+
         } else {
-          // unwrap single-item lists into a raw arg
+          // Complex expression (e.g., result of indexing) → apply
           if (argsNode.data === "list" && argsNode.children.length === 1) {
             expr = this.createNode("apply", [expr, argsNode.children[0]]);
           } else {
@@ -655,6 +729,7 @@ class DagularCompiler {
   parseMapExpression() {
     this.consume("MAP", "Expected 'map'");
     const variable = this.consume("IDENTIFIER", "Expected variable name");
+    this.localVariables.add(variable.value);
     this.consume("IN", "Expected 'in'");
     const iterable = this.parseExpression();
 
@@ -674,6 +749,7 @@ class DagularCompiler {
   parseLambdaExpression() {
     this.consume("LAMBDA", "Expected '\\'");
     const param = this.consume("IDENTIFIER", "Expected parameter name");
+    this.localVariables.add(param.value);
     this.consume("ARROW", "Expected '->' after lambda parameter");
     const body = this.parseExpression();
 

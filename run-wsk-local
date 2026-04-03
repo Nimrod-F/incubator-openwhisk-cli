@@ -1,0 +1,111 @@
+#!/usr/bin/env zsh
+# Lightweight convenience wrapper to build and run the OpenWhisk CLI against a local OpenWhisk
+# Usage: ./run-wsk-local [--apihost http://host:port] [--auth <key>] [--test-only]
+# - Reads API host and auth from env vars WSK_APIHOST / WSK_AUTH or from ~/.wskprops
+# - Ensures the API host has an http(s) scheme
+# - Calls ./run-wsk to build/run the CLI and sets the properties, then runs a small smoke test
+
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$REPO_ROOT"
+
+print_usage() {
+  cat <<EOF
+Usage: $0 [--apihost http://host:port] [--auth <key>] [--test-only]
+
+Environment:
+  WSK_APIHOST  - optional; overrides APIHOST in ~/.wskprops
+  WSK_AUTH     - optional; overrides AUTH in ~/.wskprops
+
+This script will build the CLI (via ./run-wsk), set the CLI properties, and run a quick connectivity check.
+EOF
+}
+
+# Parse args (very small parser)
+APIGIVEN=""
+AUTHGIVEN=""
+TEST_ONLY="false"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --apihost)
+      APIGIVEN="$2"; shift 2;;
+    --auth)
+      AUTHGIVEN="$2"; shift 2;;
+    --test-only)
+      TEST_ONLY="true"; shift 1;;
+    -h|--help)
+      print_usage; exit 0;;
+    --)
+      shift; break;;
+    *)
+      echo "Unknown arg: $1"; print_usage; exit 1;;
+  esac
+done
+
+# Read from env or ~/.wskprops
+if [[ -n "$APIGIVEN" ]]; then
+  APIHOST="$APIGIVEN"
+elif [[ -n "${WSK_APIHOST:-}" ]]; then
+  APIHOST="$WSK_APIHOST"
+elif [[ -f "$HOME/.wskprops" ]]; then
+  APIHOST="$(sed -n 's/^APIHOST=//p' "$HOME/.wskprops" | tr -d '\n')"
+else
+  APIHOST=""
+fi
+
+if [[ -n "$AUTHGIVEN" ]]; then
+  AUTH="$AUTHGIVEN"
+elif [[ -n "${WSK_AUTH:-}" ]]; then
+  AUTH="$WSK_AUTH"
+elif [[ -f "$HOME/.wskprops" ]]; then
+  AUTH="$(sed -n 's/^AUTH=//p' "$HOME/.wskprops" | tr -d '\n')"
+else
+  AUTH=""
+fi
+
+if [[ -z "$APIHOST" ]]; then
+  echo "No API host found. Set WSK_APIHOST, pass --apihost, or add APIHOST to ~/.wskprops"
+  exit 1
+fi
+
+# Ensure scheme
+if [[ ! "$APIHOST" =~ ^https?:// ]]; then
+  APIHOST="http://$APIHOST"
+fi
+
+echo "[wsk-local] Using API host: $APIHOST"
+if [[ -n "$AUTH" ]]; then
+  echo "[wsk-local] Found AUTH in env or ~/.wskprops (will not print value)"
+else
+  echo "[wsk-local] No AUTH found; calls requiring auth may fail"
+fi
+
+# Build and set properties via the repo wrapper
+# run-wsk will build the binary and run the wsk command that follows
+set -x
+# First set properties so the CLI has the correct base URL and auth
+if [[ -n "$AUTH" ]]; then
+  ./run-wsk property set --apihost "$APIHOST" --auth "$AUTH"
+else
+  ./run-wsk property set --apihost "$APIHOST"
+fi
+
+if [[ "$TEST_ONLY" == "true" ]]; then
+  echo "[wsk-local] Test-only mode; skipping action list"
+  exit 0
+fi
+
+# Do a small smoke test: property get --all and action list
+./run-wsk property get --all || {
+  echo "[wsk-local] property get failed"; exit 1
+}
+
+echo "[wsk-local] Running 'wsk action list' to verify connectivity..."
+./run-wsk action list || {
+  echo "[wsk-local] action list failed — the CLI could not reach the API. Is OpenWhisk running at $APIHOST?"; exit 1
+}
+
+set +x
+
+echo "[wsk-local] Done"
+

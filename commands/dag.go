@@ -48,6 +48,7 @@ func init() {
 	// compile flags
 	dagCompileCmd.Flags().StringP("output", "o", "", wski18n.T("write JSON to this file (defaults to stdout)"))
 	dagCompileCmd.Flags().Bool("validate-actions", false, wski18n.T("validate that all referenced actions exist"))
+	dagCompileCmd.Flags().Bool("skip-type-check", false, wski18n.T("skip type checking (not recommended)"))
 	dagCompileCmd.Flags().StringP("schemas", "s", "", wski18n.T("path to action-schema.json (auto-discovered if not specified)"))
 
 	// deploy flags
@@ -70,20 +71,43 @@ func runDagCompile(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("reading %s: %w", file, err)
 	}
 
-	// Check for schema file
+	// Load type schemas (currently from file; future: runtime introspection, registries, etc.)
 	schemasPath, _ := cmd.Flags().GetString("schemas")
-	schemaFile := findSchemaFile(file, schemasPath)
-	
-	if schemaFile != "" {
-		if _, err := os.Stat(schemaFile); err == nil {
-			fmt.Printf("Using schema file: %s\n", schemaFile)
-			// TODO: Implement type checking with schemas
-		} else if schemasPath != "" {
-			// Explicit path provided but doesn't exist
-			return fmt.Errorf("schema file not found: %s", schemaFile)
+	schemas, schemaSource, err := loadTypeSchemas(file, schemasPath)
+	if err != nil {
+		return err
+	}
+
+	// Type check before compilation (unless skipped)
+	skipTypeCheck, _ := cmd.Flags().GetBool("skip-type-check")
+	if !skipTypeCheck && schemas != nil {
+		fmt.Fprintf(os.Stderr, "Type checking against: %s\n", schemaSource)
+
+		typeCheckResult, err := performTypeChecking(string(src), schemas, false)
+		if err != nil {
+			return fmt.Errorf("type checking error: %w", err)
+		}
+
+		if !typeCheckResult.Valid {
+			fmt.Fprintln(os.Stderr, "\n❌ Type checking failed")
+			fmt.Fprintln(os.Stderr, "\nType errors:")
+			for _, errMsg := range typeCheckResult.Errors {
+				fmt.Fprintf(os.Stderr, "  • %s\n", errMsg)
+			}
+			fmt.Fprintln(os.Stderr, "\nFix the type errors above, or skip with: --skip-type-check")
+			return fmt.Errorf("compilation aborted due to type errors")
+		}
+
+		fmt.Fprintln(os.Stderr, "✓ Type checking passed")
+
+		if len(typeCheckResult.Warnings) > 0 {
+			for _, warning := range typeCheckResult.Warnings {
+				fmt.Fprintf(os.Stderr, "  ⚠ %s\n", warning)
+			}
 		}
 	}
 
+	// Compile to JSON AST
 	jsonBytes, err := compileWithGoja(src)
 	if err != nil {
 		return fmt.Errorf("compile error: %w", err)
@@ -94,9 +118,9 @@ func runDagCompile(cmd *cobra.Command, args []string) error {
 		if err := os.WriteFile(outPath, jsonBytes, 0644); err != nil {
 			return fmt.Errorf("failed to write %s: %w", outPath, err)
 		}
-		fmt.Printf("Compiled successfully to %s\n", outPath)
+		fmt.Fprintf(os.Stderr, "Compiled successfully to %s\n", outPath)
 	} else {
-		// Print to stdout
+		// Print AST to stdout (status messages go to stderr so AST is pipe-friendly)
 		fmt.Println(string(jsonBytes))
 	}
 	return nil
@@ -112,25 +136,15 @@ func runDagDeploy(cmd *cobra.Command, args []string) error {
 	skipValidation, _ := cmd.Flags().GetBool("skip-validation")
 	verbose, _ := cmd.Flags().GetBool("verbose")
 
-	// Check for schema file
+	// Load type schemas (pluggable — currently from file)
 	schemasPath, _ := cmd.Flags().GetString("schemas")
-	schemaFile := findSchemaFile(file, schemasPath)
-	var schemas []byte
-	
-	if schemaFile != "" {
-		if _, err := os.Stat(schemaFile); err == nil {
-			if verbose {
-				fmt.Printf("Using schema file: %s\n", schemaFile)
-			}
-			schemas, err = ioutil.ReadFile(schemaFile)
-			if err != nil {
-				return fmt.Errorf("failed to read schema file: %w", err)
-			}
-		} else if schemasPath != "" {
-			// Explicit path provided but doesn't exist
-			return fmt.Errorf("schema file not found: %s", schemaFile)
-		}
-	} else if verbose {
+	schemas, schemaSource, err := loadTypeSchemas(file, schemasPath)
+	if err != nil {
+		return err
+	}
+	if schemas != nil && verbose {
+		fmt.Printf("Using schema file: %s\n", schemaSource)
+	} else if schemas == nil && verbose {
 		fmt.Println("No schema file found (type checking disabled)")
 	}
 
@@ -333,28 +347,82 @@ func validateReferencedActions(source string, verbose bool) (*ValidationResult, 
 	return result, nil
 }
 
-// extractActionInvocations finds all action invocations in source code
+// extractActionInvocations finds all action invocations in source code,
+// including bare function names resolved via import statements.
 func extractActionInvocations(source string) []string {
 	actionSet := make(map[string]bool)
-	
-	// Match patterns like: /_/actionName( or /namespace/actionName(
+
+	// 1. Extract explicit action paths (e.g., /_/hello(...) or /ns/action(...))
 	actionPattern := regexp.MustCompile(`/([\w_\-/]+)\s*\(`)
 	matches := actionPattern.FindAllStringSubmatch(source, -1)
-	
 	for _, match := range matches {
 		if len(match) > 1 {
 			actionPath := "/" + match[1]
 			actionSet[actionPath] = true
 		}
 	}
-	
+
+	// 2. Parse import statements to build namespace map
+	imports := parseImportStatements(source)
+
+	// 3. Find bare identifier invocations (name(...)) and resolve via imports
+	//    or default namespace /_/
+	bareCallPattern := regexp.MustCompile(`\b([a-zA-Z_]\w*)\s*\(`)
+	bareMatches := bareCallPattern.FindAllStringSubmatch(source, -1)
+	keywords := map[string]bool{
+		"if": true, "else": true, "map": true, "let": true,
+		"return": true, "not": true, "and": true, "or": true,
+		"true": true, "false": true, "import": true, "from": true,
+	}
+	for _, match := range bareMatches {
+		if len(match) > 1 {
+			name := match[1]
+			if keywords[name] {
+				continue
+			}
+			if ns, ok := imports[name]; ok {
+				// Imported name -> resolve to imported namespace
+				actionPath := "/" + ns + "/" + name
+				actionSet[actionPath] = true
+			} else {
+				// Bare unimported name -> default namespace
+				actionPath := "/_/" + name
+				actionSet[actionPath] = true
+			}
+		}
+	}
+
 	// Convert map to slice
 	actions := make([]string, 0, len(actionSet))
 	for action := range actionSet {
 		actions = append(actions, action)
 	}
-	
+
 	return actions
+}
+
+// parseImportStatements extracts import mappings from source code.
+// Parses lines matching: import {name1, name2} from namespace
+func parseImportStatements(source string) map[string]string {
+	imports := make(map[string]string)
+	importPattern := regexp.MustCompile(`import\s*\{([^}]+)\}\s*from\s+(\w+)`)
+	matches := importPattern.FindAllStringSubmatch(source, -1)
+
+	for _, match := range matches {
+		if len(match) > 2 {
+			namesStr := match[1]
+			namespace := match[2]
+			names := strings.Split(namesStr, ",")
+			for _, name := range names {
+				trimmed := strings.TrimSpace(name)
+				if trimmed != "" {
+					imports[trimmed] = namespace
+				}
+			}
+		}
+	}
+
+	return imports
 }
 
 // checkActionExists verifies if an action exists in OpenWhisk
@@ -451,6 +519,33 @@ func findSchemaFile(dagFilePath string, explicitPath string) string {
 
 	// Not found - return empty string
 	return ""
+}
+
+// loadTypeSchemas resolves action type schemas from the available source.
+// Currently loads from a JSON file (action-schema.json).
+// Future sources can be added here: runtime introspection, central registry, etc.
+// Returns (schemas bytes, source description, error).
+func loadTypeSchemas(dagFilePath string, explicitPath string) ([]byte, string, error) {
+	// Source 1: Schema file (current implementation)
+	schemaFile := findSchemaFile(dagFilePath, explicitPath)
+
+	if schemaFile != "" {
+		if _, err := os.Stat(schemaFile); err == nil {
+			schemas, err := ioutil.ReadFile(schemaFile)
+			if err != nil {
+				return nil, "", fmt.Errorf("failed to read schema file: %w", err)
+			}
+			return schemas, schemaFile, nil
+		} else if explicitPath != "" {
+			return nil, "", fmt.Errorf("schema file not found: %s", schemaFile)
+		}
+	}
+
+	// Source 2: (future) Runtime introspection — query OpenWhisk for action metadata
+	// Source 3: (future) Central type registry
+
+	// No type source available
+	return nil, "", nil
 }
 
 // TypeCheckResult holds the result of type checking
