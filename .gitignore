@@ -29,3 +29,6 @@ tests/out/
 
 # Misc
 javascript/
+
+# Redis runtime dump (not source)
+dump.rdb

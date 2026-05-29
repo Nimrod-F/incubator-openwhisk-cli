@@ -1,0 +1,4 @@
+./wsk dag compile actions/dag/typecheck-pass.dag
+./wsk dag compile actions/dag/typecheck-fail.dag
+./wsk dag compile actions/dag/typecheck-fail-missing.dag
+./wsk dag compile actions/dag/typecheck-fail.dag --skip-type-check

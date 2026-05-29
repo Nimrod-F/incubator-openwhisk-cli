@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -59,8 +60,12 @@ func init() {
 	dagDeployCmd.Flags().Bool("verbose", false, wski18n.T("show detailed validation information"))
 	dagDeployCmd.Flags().StringP("schemas", "s", "", wski18n.T("path to action-schema.json (auto-discovered if not specified)"))
 
-	// register
-	dagCmd.AddCommand(dagCompileCmd, dagDeployCmd)
+	// Redis flag (inherited by all dag subcommands)
+	dagCmd.PersistentFlags().String("redis-url", "", "Redis URL for type schema persistence (default: localhost:6379)")
+
+	// register subcommands
+	initDagTypesCommands()
+	dagCmd.AddCommand(dagCompileCmd, dagDeployCmd, dagTypesCmd)
 	WskCmd.AddCommand(dagCmd)
 }
 
@@ -71,9 +76,10 @@ func runDagCompile(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("reading %s: %w", file, err)
 	}
 
-	// Load type schemas (currently from file; future: runtime introspection, registries, etc.)
+	// Load type schemas (Redis → file fallback)
 	schemasPath, _ := cmd.Flags().GetString("schemas")
-	schemas, schemaSource, err := loadTypeSchemas(file, schemasPath)
+	redisURL, _ := cmd.Flags().GetString("redis-url")
+	schemas, schemaSource, err := loadTypeSchemas(src, file, schemasPath, redisURL)
 	if err != nil {
 		return err
 	}
@@ -136,9 +142,10 @@ func runDagDeploy(cmd *cobra.Command, args []string) error {
 	skipValidation, _ := cmd.Flags().GetBool("skip-validation")
 	verbose, _ := cmd.Flags().GetBool("verbose")
 
-	// Load type schemas (pluggable — currently from file)
+	// Load type schemas (Redis → file fallback)
 	schemasPath, _ := cmd.Flags().GetString("schemas")
-	schemas, schemaSource, err := loadTypeSchemas(file, schemasPath)
+	redisURL, _ := cmd.Flags().GetString("redis-url")
+	schemas, schemaSource, err := loadTypeSchemas(src, file, schemasPath, redisURL)
 	if err != nil {
 		return err
 	}
@@ -239,6 +246,17 @@ func runDagDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	printActionCreated(actionName)
+
+	// 5) Intercept: extract type signatures from the compiled AST and persist to Redis
+	count, err := persistSignatures(jsonBytes, redisURL)
+	if err != nil {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "  (could not persist signatures to Redis: %v)\n", err)
+		}
+	} else if count > 0 {
+		fmt.Fprintf(os.Stderr, "✓ Persisted type signatures for %d action(s) to Redis\n", count)
+	}
+
 	return nil
 }
 
@@ -522,13 +540,38 @@ func findSchemaFile(dagFilePath string, explicitPath string) string {
 }
 
 // loadTypeSchemas resolves action type schemas from the available source.
-// Currently loads from a JSON file (action-schema.json).
-// Future sources can be added here: runtime introspection, central registry, etc.
+// Priority: explicit file flag > Redis > auto-discovered file > none.
 // Returns (schemas bytes, source description, error).
-func loadTypeSchemas(dagFilePath string, explicitPath string) ([]byte, string, error) {
-	// Source 1: Schema file (current implementation)
-	schemaFile := findSchemaFile(dagFilePath, explicitPath)
+func loadTypeSchemas(dagSource []byte, dagFilePath string, explicitPath string, redisURL string) ([]byte, string, error) {
+	// Source 1: Explicit schema file (--schemas flag)
+	if explicitPath != "" {
+		schemaFile := findSchemaFile(dagFilePath, explicitPath)
+		if _, err := os.Stat(schemaFile); err == nil {
+			schemas, err := ioutil.ReadFile(schemaFile)
+			if err != nil {
+				return nil, "", fmt.Errorf("failed to read schema file: %w", err)
+			}
+			return schemas, schemaFile, nil
+		}
+		return nil, "", fmt.Errorf("schema file not found: %s", explicitPath)
+	}
 
+	// Source 2: Redis
+	resolvedURL := getRedisURL(redisURL)
+	client, err := newRedisClient(resolvedURL)
+	if err == nil {
+		defer client.Close()
+		actionPaths := extractActionInvocations(string(dagSource))
+		if len(actionPaths) > 0 {
+			schemas, err := redisGetMultipleSchemas(client, actionPaths)
+			if err == nil && schemas != nil {
+				return schemas, "Redis", nil
+			}
+		}
+	}
+
+	// Source 3: Auto-discovered file (fallback)
+	schemaFile := findSchemaFile(dagFilePath, "")
 	if schemaFile != "" {
 		if _, err := os.Stat(schemaFile); err == nil {
 			schemas, err := ioutil.ReadFile(schemaFile)
@@ -536,13 +579,8 @@ func loadTypeSchemas(dagFilePath string, explicitPath string) ([]byte, string, e
 				return nil, "", fmt.Errorf("failed to read schema file: %w", err)
 			}
 			return schemas, schemaFile, nil
-		} else if explicitPath != "" {
-			return nil, "", fmt.Errorf("schema file not found: %s", schemaFile)
 		}
 	}
-
-	// Source 2: (future) Runtime introspection — query OpenWhisk for action metadata
-	// Source 3: (future) Central type registry
 
 	// No type source available
 	return nil, "", nil
@@ -652,5 +690,200 @@ func performTypeChecking(source string, schemas []byte, verbose bool) (*TypeChec
 		Errors:   errors,
 		Warnings: warnings,
 	}, nil
+}
+
+// astNode represents a node in the Dagular JSON AST.
+type astNode struct {
+	Data     string        `json:"data"`
+	Children []interface{} `json:"children"`
+}
+
+// extractSignaturesFromAST walks a compiled Dagular AST and extracts action
+// type signatures directly from invocation nodes.
+// e.g. hello(name: "Alice", age: 25) → /_/hello { parameters: { name: {type: "string"}, age: {type: "number"} } }
+func extractSignaturesFromAST(astJSON []byte) (map[string]map[string]interface{}, error) {
+	var root astNode
+	if err := json.Unmarshal(astJSON, &root); err != nil {
+		return nil, fmt.Errorf("parsing AST: %w", err)
+	}
+
+	signatures := make(map[string]map[string]interface{}) // actionPath → schema
+	walkAST(&root, signatures)
+	return signatures, nil
+}
+
+// walkAST recursively visits AST nodes and collects invocation parameter types.
+func walkAST(node *astNode, signatures map[string]map[string]interface{}) {
+	if node == nil {
+		return
+	}
+
+	if node.Data == "invocation" && len(node.Children) >= 2 {
+		// children[0] = action path (string), children[1] = dict node (arguments)
+		actionPath, ok := node.Children[0].(string)
+		if !ok {
+			return
+		}
+
+		// Parse the dict (arguments) node
+		argsRaw, ok := node.Children[1].(map[string]interface{})
+		if !ok {
+			return
+		}
+
+		params := extractParamsFromDict(argsRaw)
+		if len(params) > 0 {
+			if existing, ok := signatures[actionPath]; ok {
+				// Merge: add new params we haven't seen before
+				existingParams := existing["parameters"].(map[string]interface{})
+				for k, v := range params {
+					if _, exists := existingParams[k]; !exists {
+						existingParams[k] = v
+					}
+				}
+			} else {
+				signatures[actionPath] = map[string]interface{}{
+					"parameters": params,
+				}
+			}
+		}
+	}
+
+	// Recurse into children
+	for _, child := range node.Children {
+		if childMap, ok := child.(map[string]interface{}); ok {
+			childNode := mapToASTNode(childMap)
+			if childNode != nil {
+				walkAST(childNode, signatures)
+			}
+		}
+	}
+}
+
+// extractParamsFromDict extracts parameter names and types from a "dict" AST node.
+func extractParamsFromDict(dictRaw map[string]interface{}) map[string]interface{} {
+	if dictRaw["data"] != "dict" {
+		return nil
+	}
+
+	children, ok := dictRaw["children"].([]interface{})
+	if !ok {
+		return nil
+	}
+
+	params := make(map[string]interface{})
+	for _, pairRaw := range children {
+		pairMap, ok := pairRaw.(map[string]interface{})
+		if !ok || pairMap["data"] != "pair" {
+			continue
+		}
+
+		pairChildren, ok := pairMap["children"].([]interface{})
+		if !ok || len(pairChildren) < 2 {
+			continue
+		}
+
+		// First child = key (id node), second child = value node
+		keyMap, ok := pairChildren[0].(map[string]interface{})
+		if !ok || keyMap["data"] != "id" {
+			continue
+		}
+		keyChildren, ok := keyMap["children"].([]interface{})
+		if !ok || len(keyChildren) == 0 {
+			continue
+		}
+		paramName, ok := keyChildren[0].(string)
+		if !ok {
+			continue
+		}
+
+		// Determine type from value node
+		valueMap, ok := pairChildren[1].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		paramType := nodeToType(valueMap)
+		if paramType != "" {
+			params[paramName] = map[string]interface{}{
+				"type":     paramType,
+				"required": true,
+			}
+		}
+	}
+
+	return params
+}
+
+// nodeToType determines the type of an AST value node directly from its data field.
+func nodeToType(node map[string]interface{}) string {
+	data, _ := node["data"].(string)
+	switch data {
+	case "string":
+		return "string"
+	case "number":
+		return "number"
+	case "id":
+		// Check for boolean literals
+		children, _ := node["children"].([]interface{})
+		if len(children) > 0 {
+			if val, ok := children[0].(string); ok {
+				if val == "true" || val == "false" {
+					return "boolean"
+				}
+			}
+		}
+		return "" // variable reference — type unknown, skip
+	case "list":
+		return "array"
+	case "dict":
+		return "object"
+	case "invocation":
+		return "" // action return type unknown, skip
+	default:
+		return ""
+	}
+}
+
+// mapToASTNode converts a raw map to an astNode.
+func mapToASTNode(m map[string]interface{}) *astNode {
+	data, _ := m["data"].(string)
+	if data == "" {
+		return nil
+	}
+	children, _ := m["children"].([]interface{})
+	return &astNode{Data: data, Children: children}
+}
+
+// persistSignatures stores extracted action signatures in Redis.
+// Called automatically after a successful deploy.
+func persistSignatures(astJSON []byte, redisURL string) (int, error) {
+	signatures, err := extractSignaturesFromAST(astJSON)
+	if err != nil {
+		return 0, err
+	}
+	if len(signatures) == 0 {
+		return 0, nil
+	}
+
+	resolvedURL := getRedisURL(redisURL)
+	client, err := newRedisClient(resolvedURL)
+	if err != nil {
+		return 0, err
+	}
+	defer client.Close()
+
+	count := 0
+	for actionPath, schema := range signatures {
+		schemaJSON, err := json.Marshal(schema)
+		if err != nil {
+			continue
+		}
+		if err := redisSetSchema(client, actionPath, schemaJSON); err != nil {
+			continue
+		}
+		count++
+	}
+
+	return count, nil
 }
 

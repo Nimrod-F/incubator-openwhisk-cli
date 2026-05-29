@@ -120,6 +120,11 @@ var actionCreateCmd = &cobra.Command{
 
 		printActionCreated(action.Name)
 
+		// Deployment interception: extract type signature from source and persist to Redis
+		if len(args) >= 2 {
+			interceptDeployment(action.Name, args[1])
+		}
+
 		return nil
 	},
 }
@@ -156,6 +161,11 @@ var actionUpdateCmd = &cobra.Command{
 		}
 
 		printActionUpdated(action.Name)
+
+		// Deployment interception: extract type signature from source and persist to Redis
+		if len(args) >= 2 {
+			interceptDeployment(action.Name, args[1])
+		}
 
 		return nil
 	},
@@ -1546,6 +1556,40 @@ func isWebAction(client *whisk.Client, qname QualifiedName) (*whisk.Action, erro
 	client.Namespace = savedNs
 
 	return action, err
+}
+
+// interceptDeployment reads the source file of a deployed action, extracts
+// type annotations (@param / @returns), and persists them to Redis.
+// This is called automatically after wsk action create / update.
+// It silently does nothing if the file is binary, unreadable, or has no annotations.
+func interceptDeployment(actionName string, artifactPath string) {
+	ext := filepath.Ext(artifactPath)
+
+	// Skip binary artifacts — can't parse .jar/.zip for annotations
+	if ext == ZIP_EXT || ext == JAVA_EXT || ext == BAL_BIN_EXT {
+		return
+	}
+
+	source, err := ReadFile(artifactPath)
+	if err != nil {
+		return
+	}
+
+	count, err := persistActionSignature(actionName, source, "")
+	if err != nil {
+		// Silently ignore Redis errors — don't break the deploy
+		return
+	}
+	if count > 0 {
+		fmt.Fprintf(
+			color.Output,
+			wski18n.T("{{.ok}} persisted type signature ({{.count}} param(s)) for {{.name}} to Redis\n",
+				map[string]interface{}{
+					"ok":    color.GreenString("ok:"),
+					"count": count,
+					"name":  boldString(actionName),
+				}))
+	}
 }
 
 func init() {
