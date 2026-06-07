@@ -223,7 +223,17 @@ class DagularCompiler {
       }
 
       const ast = this.parseProgram();
-      return ast;
+
+      // ─── Common Subexpression Elimination (compile-time optimization) ──────────
+      // Detect structurally-identical, pure subexpressions that occur more than
+      // once within a block and hoist each into a single `let` binding, so the
+      // runtime evaluates it once and shares the result. Built-in pure
+      // expressions (arithmetic, unary, indexing) are always eligible; action
+      // invocations are eligible only when the action is marked pure via a
+      // `// @pure actionName` annotation in the source.
+      this.cseCounter = 0;
+      const pureActions = this.parsePureAnnotations(source);
+      return this.applyCse(ast, pureActions);
     } catch (error) {
       throw new Error(`Compilation failed: ${error.message}`);
     }
@@ -755,9 +765,184 @@ class DagularCompiler {
 
     return this.createNode("lambda", [param.value, body]);
   }
+
+  // ─── Common Subexpression Elimination (compile-time pass) ─────────────────────
+  // Finds structurally-identical, pure subexpressions that occur more than once
+  // within a block and hoists each into a single `let` binding. The existing
+  // runtime evaluates a let-bound expression once and shares its Future, so this
+  // is purely a compile-time rewrite and needs no runtime change.
+
+  // Collect the set of pure action names from `@pure name1, name2` annotations
+  // (written in comments, e.g. `// @pure getProfile, lookup`).
+  parsePureAnnotations(source) {
+    const pure = new Set();
+    if (typeof source !== "string") return pure;
+    const re = /@pure\s+([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)/g;
+    let m;
+    while ((m = re.exec(source)) !== null) {
+      m[1].split(",").forEach((n) => {
+        const t = n.trim();
+        if (t) pure.add(t);
+      });
+    }
+    return pure;
+  }
+
+  // Final segment of an action path: "/payments/charge" -> "charge".
+  cseActionName(path) {
+    const parts = String(path).split("/").filter((s) => s.length > 0);
+    return parts.length > 0 ? parts[parts.length - 1] : String(path);
+  }
+
+  // Canonical structural key: identical structure -> identical key.
+  cseStructuralKey(node) {
+    if (node === null || node === undefined) return "n";
+    if (typeof node !== "object") return "v:" + JSON.stringify(node);
+    const kids = (node.children || []).map((c) => this.cseStructuralKey(c));
+    return node.data + "[" + kids.join("|") + "]";
+  }
+
+  // Is the node pure (safe to compute once)? Action invocations are pure only
+  // when their action name appears in pureActions.
+  cseIsEligible(node, pureActions) {
+    if (!node || typeof node !== "object" || !node.data) return false;
+    switch (node.data) {
+      case "number":
+      case "string":
+      case "id":
+        return true;
+      case "binop":
+        return (
+          this.cseIsEligible(node.children[0], pureActions) &&
+          this.cseIsEligible(node.children[2], pureActions)
+        );
+      case "unop":
+        return this.cseIsEligible(node.children[1], pureActions);
+      case "index":
+        return node.children.every((c) => this.cseIsEligible(c, pureActions));
+      case "list":
+        return node.children.every((c) => this.cseIsEligible(c, pureActions));
+      case "pair":
+        return this.cseIsEligible(node.children[1], pureActions);
+      case "dict":
+        return node.children.every((p) => this.cseIsEligible(p, pureActions));
+      case "invocation": {
+        const name = this.cseActionName(node.children[0]);
+        if (!pureActions.has(name)) return false;
+        return this.cseIsEligible(node.children[1], pureActions);
+      }
+      default:
+        // if_expr, map_expr, lambda, apply, assign, return, block_expr: not eligible
+        return false;
+    }
+  }
+
+  // Is the node a composite worth hoisting (and pure)?
+  cseIsCandidate(node, pureActions) {
+    if (!node || typeof node !== "object") return false;
+    if (
+      node.data !== "binop" &&
+      node.data !== "unop" &&
+      node.data !== "index" &&
+      node.data !== "invocation"
+    ) {
+      return false;
+    }
+    return this.cseIsEligible(node, pureActions);
+  }
+
+  // Collect candidate occurrences within a statement, without crossing scopes.
+  cseCollect(node, stmtIndex, occ, pureActions) {
+    if (!node || typeof node !== "object" || !Array.isArray(node.children)) return;
+    if (
+      node.data === "block_expr" ||
+      node.data === "if_expr" ||
+      node.data === "map_expr" ||
+      node.data === "lambda"
+    ) {
+      return; // scope boundary: handled by its own CSE pass
+    }
+    if (this.cseIsCandidate(node, pureActions)) {
+      const key = this.cseStructuralKey(node);
+      const info = occ.get(key);
+      if (info) {
+        info.count += 1;
+      } else {
+        occ.set(key, { node: node, count: 1, firstStmtIndex: stmtIndex });
+      }
+    }
+    for (const c of node.children) {
+      this.cseCollect(c, stmtIndex, occ, pureActions);
+    }
+  }
+
+  // Replace every occurrence of the keyed subexpression with a reference to
+  // varName, without crossing scopes.
+  cseReplace(node, key, varName) {
+    if (!node || typeof node !== "object" || !Array.isArray(node.children)) return node;
+    if (
+      node.data === "block_expr" ||
+      node.data === "if_expr" ||
+      node.data === "map_expr" ||
+      node.data === "lambda"
+    ) {
+      return node; // scope boundary
+    }
+    if (this.cseStructuralKey(node) === key) {
+      return this.createNode("id", [varName]);
+    }
+    node.children = node.children.map((c) => this.cseReplace(c, key, varName));
+    return node;
+  }
+
+  // Within-block CSE: repeatedly hoist the earliest duplicated candidate until
+  // none remain. Each iteration eliminates one duplicated subexpression.
+  cseBlock(blockNode, pureActions) {
+    let guard = 0;
+    while (guard++ < 1000) {
+      const statements = blockNode.children;
+      const occ = new Map();
+      for (let i = 0; i < statements.length; i++) {
+        this.cseCollect(statements[i], i, occ, pureActions);
+      }
+      let chosen = null;
+      for (const [key, info] of occ) {
+        if (info.count >= 2) {
+          if (chosen === null || info.firstStmtIndex < chosen.info.firstStmtIndex) {
+            chosen = { key: key, info: info };
+          }
+        }
+      }
+      if (!chosen) break;
+
+      const varName = "_cse" + this.cseCounter++;
+      const binding = this.createNode("assign", [
+        this.createNode("id", [varName]),
+        JSON.parse(JSON.stringify(chosen.info.node)), // deep clone the canonical expr
+      ]);
+      const idx = chosen.info.firstStmtIndex;
+      const next = [];
+      for (let i = 0; i < statements.length; i++) {
+        if (i === idx) next.push(binding);
+        next.push(this.cseReplace(statements[i], chosen.key, varName));
+      }
+      blockNode.children = next;
+    }
+    return blockNode;
+  }
+
+  // Recurse through the AST, applying within-block CSE to every block_expr.
+  applyCse(node, pureActions) {
+    if (!node || typeof node !== "object" || !Array.isArray(node.children)) return node;
+    node.children = node.children.map((c) => this.applyCse(c, pureActions));
+    if (node.data === "block_expr") {
+      return this.cseBlock(node, pureActions);
+    }
+    return node;
+  }
 }
 
 // Export for Node.js
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { DagularCompiler, compileDagular };
+  module.exports = { DagularCompiler };
 }
