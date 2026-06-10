@@ -445,38 +445,33 @@ func parseImportStatements(source string) map[string]string {
 
 // checkActionExists verifies if an action exists in OpenWhisk
 func checkActionExists(actionPath string) (bool, error) {
-	// Parse action path: /namespace/packageName/actionName or /_/actionName
-	parts := strings.Split(strings.Trim(actionPath, "/"), "/")
-	if len(parts) == 0 {
-		return false, fmt.Errorf("invalid action path: %s", actionPath)
-	}
-
-	// Extract components
-	var actionName string
-	if len(parts) == 1 {
-		// /_/actionName -> actionName in default namespace
-		actionName = parts[0]
-	} else if len(parts) == 2 {
-		// /_/actionName or /namespace/actionName
-		if parts[0] == "_" {
-			actionName = parts[1]
-		} else {
-			// Assume it's namespace/action
-			actionName = parts[1]
-		}
-	} else {
-		// /namespace/package/action
-		actionName = strings.Join(parts[1:], "/")
-	}
-
-	// Try to get the action
-	_, _, err := Client.Actions.Get(actionName, false)
+	// Resolve the path the same way the runtime does: the leading segment is the
+	// namespace (/_/ denotes the default), and the remainder is the (possibly
+	// package-qualified) action name. The previous implementation split the path
+	// and kept only the bare action name, querying it in the default namespace;
+	// as a result, a reference to an action in the wrong namespace (e.g. a typo'd
+	// import) was wrongly reported as existing whenever an action of the same
+	// name happened to exist in the default namespace.
+	qn, err := NewQualifiedName(actionPath)
 	if err != nil {
-		// Check if it's a 404 error
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+		return false, fmt.Errorf("invalid action path %s: %w", actionPath, err)
+	}
+
+	// Query the action in its own namespace, restoring the client afterwards.
+	origNS := Client.Namespace
+	Client.Namespace = qn.GetNamespace()
+	defer func() { Client.Namespace = origNS }()
+
+	_, _, err = Client.Actions.Get(qn.GetEntityName(), false)
+	if err != nil {
+		msg := err.Error()
+		// Action genuinely absent, or unreachable from this account's namespace.
+		if strings.Contains(msg, "404") || strings.Contains(msg, "not found") ||
+			strings.Contains(msg, "does not exist") || strings.Contains(msg, "403") ||
+			strings.Contains(msg, "not authorized") {
 			return false, nil
 		}
-		// Other error (permissions, network, etc.)
+		// Other error (network, etc.)
 		return false, err
 	}
 
