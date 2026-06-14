@@ -4,14 +4,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/dop251/goja"
 	"github.com/apache/openwhisk-cli/wski18n"
 	"github.com/apache/openwhisk-client-go/whisk"
 	"github.com/spf13/cobra"
-)
-
-import (
 	_ "embed"
 )
 
@@ -21,6 +20,9 @@ const (
 
 //go:embed dagular/dagular_compiler.js
 var compilerJS []byte
+
+//go:embed dagular/type_checker.js
+var typeCheckerJS []byte
 
 var dagCmd = &cobra.Command{
 	Use:   "dag",
@@ -45,10 +47,16 @@ var dagDeployCmd = &cobra.Command{
 func init() {
 	// compile flags
 	dagCompileCmd.Flags().StringP("output", "o", "", wski18n.T("write JSON to this file (defaults to stdout)"))
+	dagCompileCmd.Flags().Bool("validate-actions", false, wski18n.T("validate that all referenced actions exist"))
+	dagCompileCmd.Flags().StringP("schemas", "s", "", wski18n.T("path to action-schema.json (auto-discovered if not specified)"))
 
 	// deploy flags
 	dagDeployCmd.Flags().StringP("name", "n", "", wski18n.T("the name of the Dagular action"))
 	dagDeployCmd.MarkFlagRequired("name")
+	dagDeployCmd.Flags().Bool("skip-validation", false, wski18n.T("skip action validation (not recommended)"))
+	dagDeployCmd.Flags().Bool("skip-type-check", false, wski18n.T("skip type checking (not recommended)"))
+	dagDeployCmd.Flags().Bool("verbose", false, wski18n.T("show detailed validation information"))
+	dagDeployCmd.Flags().StringP("schemas", "s", "", wski18n.T("path to action-schema.json (auto-discovered if not specified)"))
 
 	// register
 	dagCmd.AddCommand(dagCompileCmd, dagDeployCmd)
@@ -61,18 +69,36 @@ func runDagCompile(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", file, err)
 	}
+
+	// Check for schema file
+	schemasPath, _ := cmd.Flags().GetString("schemas")
+	schemaFile := findSchemaFile(file, schemasPath)
+	
+	if schemaFile != "" {
+		if _, err := os.Stat(schemaFile); err == nil {
+			fmt.Printf("Using schema file: %s\n", schemaFile)
+			// TODO: Implement type checking with schemas
+		} else if schemasPath != "" {
+			// Explicit path provided but doesn't exist
+			return fmt.Errorf("schema file not found: %s", schemaFile)
+		}
+	}
+
 	jsonBytes, err := compileWithGoja(src)
 	if err != nil {
 		return fmt.Errorf("compile error: %w", err)
 	}
 	outPath, _ := cmd.Flags().GetString("output")
 
-    if outPath != "" {
-        if err := os.WriteFile(outPath, jsonBytes, 0644); err != nil {
-            return fmt.Errorf("failed to write %s: %w", outPath, err)
-        }
-       return nil
-    }
+	if outPath != "" {
+		if err := os.WriteFile(outPath, jsonBytes, 0644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", outPath, err)
+		}
+		fmt.Printf("Compiled successfully to %s\n", outPath)
+	} else {
+		// Print to stdout
+		fmt.Println(string(jsonBytes))
+	}
 	return nil
 }
 
@@ -83,13 +109,106 @@ func runDagDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to read %s: %w", file, err)
 	}
 
-	// 1) compile to JSON AST
+	skipValidation, _ := cmd.Flags().GetBool("skip-validation")
+	verbose, _ := cmd.Flags().GetBool("verbose")
+
+	// Check for schema file
+	schemasPath, _ := cmd.Flags().GetString("schemas")
+	schemaFile := findSchemaFile(file, schemasPath)
+	var schemas []byte
+	
+	if schemaFile != "" {
+		if _, err := os.Stat(schemaFile); err == nil {
+			if verbose {
+				fmt.Printf("Using schema file: %s\n", schemaFile)
+			}
+			schemas, err = ioutil.ReadFile(schemaFile)
+			if err != nil {
+				return fmt.Errorf("failed to read schema file: %w", err)
+			}
+		} else if schemasPath != "" {
+			// Explicit path provided but doesn't exist
+			return fmt.Errorf("schema file not found: %s", schemaFile)
+		}
+	} else if verbose {
+		fmt.Println("No schema file found (type checking disabled)")
+	}
+
+	// 1) Validate that referenced actions exist (unless skipped)
+	if !skipValidation {
+		if verbose {
+			fmt.Println("Validating referenced actions...")
+		}
+		
+		validationResult, err := validateReferencedActions(string(src), verbose)
+		if err != nil {
+			return fmt.Errorf("validation error: %w", err)
+		}
+
+		if !validationResult.Valid {
+			fmt.Println("\n❌ Validation failed: Some referenced actions are not deployed")
+			fmt.Println("\nMissing actions:")
+			for _, action := range validationResult.MissingActions {
+				fmt.Printf("  • %s\n", action)
+			}
+			fmt.Println("\nPlease deploy the missing actions first:")
+			for _, action := range validationResult.MissingActions {
+				actionName := getActionName(action)
+				fmt.Printf("  wsk action create %s %s.js\n", actionName, actionName)
+			}
+			fmt.Println("\nOr skip validation with: --skip-validation (not recommended)")
+			return fmt.Errorf("deployment aborted due to missing actions")
+		}
+
+		if verbose && validationResult.Valid {
+			fmt.Printf("✓ All %d referenced action(s) validated successfully\n", len(validationResult.CheckedActions))
+		}
+	}
+
+	// 2) Type checking with schemas (if available)
+	skipTypeCheck, _ := cmd.Flags().GetBool("skip-type-check")
+	if !skipTypeCheck && schemas != nil && len(schemas) > 0 {
+		if verbose {
+			fmt.Println("Performing type checking...")
+		}
+		
+		typeCheckResult, err := performTypeChecking(string(src), schemas, verbose)
+		if err != nil {
+			return fmt.Errorf("type checking error: %w", err)
+		}
+
+		if !typeCheckResult.Valid {
+			fmt.Println("\n❌ Type checking failed")
+			fmt.Println("\nType errors:")
+			for _, errMsg := range typeCheckResult.Errors {
+				fmt.Printf("  • %s\n", errMsg)
+			}
+			fmt.Println("\nPlease fix the type mismatches above.")
+			fmt.Println("Or skip type checking with: --skip-type-check (not recommended)")
+			return fmt.Errorf("deployment aborted due to type errors")
+		}
+
+		if verbose && typeCheckResult.Valid {
+			fmt.Println("✓ Type checking passed")
+		}
+
+		// Show warnings if any
+		if len(typeCheckResult.Warnings) > 0 {
+			fmt.Println("\n⚠️  Warnings:")
+			for _, warning := range typeCheckResult.Warnings {
+				fmt.Printf("  • %s\n", warning)
+			}
+			fmt.Println()
+		}
+	}
+
+	// 3) compile to JSON AST
 	jsonBytes, err := compileWithGoja(src)
 	if err != nil {
 		return fmt.Errorf("compile error: %w", err)
 	}
 
-	// 2) build whisk.Action
+	// 3) build whisk.Action
 	actionName, _ := cmd.Flags().GetString("name")
 	action := &whisk.Action{
 		Name: actionName,
@@ -100,7 +219,7 @@ func runDagDeploy(cmd *cobra.Command, args []string) error {
 	codeStr := string(jsonBytes)
 	action.Exec.Code = &codeStr
 
-	// 3) deploy via existing client
+	// 4) deploy via existing client
 	if _, _, err := Client.Actions.Insert(action, true); err != nil {
 		return fmt.Errorf("failed to create Dagular action %s: %v", actionName, err)
 	}
@@ -151,5 +270,292 @@ func compileWithGoja(src []byte) ([]byte, error) {
     return []byte(outVal.String()), nil
 }
 
+// ValidationResult holds the result of action validation
+type ValidationResult struct {
+	Valid           bool     `json:"valid"`
+	CheckedActions  []string `json:"checkedActions"`
+	MissingActions  []string `json:"missingActions"`
+	Errors          []string `json:"errors"`
+}
 
+// validateReferencedActions checks if all actions referenced in the DAG source exist
+func validateReferencedActions(source string, verbose bool) (*ValidationResult, error) {
+	// Extract action invocations from source using regex
+	actionPaths := extractActionInvocations(source)
+	
+	if len(actionPaths) == 0 {
+		if verbose {
+			fmt.Println("No action invocations found in DAG")
+		}
+		return &ValidationResult{Valid: true}, nil
+	}
+
+	if verbose {
+		fmt.Printf("Found %d action invocation(s) to validate\n", len(actionPaths))
+	}
+
+	result := &ValidationResult{
+		Valid:          true,
+		CheckedActions: []string{},
+		MissingActions: []string{},
+		Errors:         []string{},
+	}
+
+	// Check each action
+	for _, actionPath := range actionPaths {
+		if verbose {
+			fmt.Printf("  Checking %s... ", actionPath)
+		}
+
+		exists, err := checkActionExists(actionPath)
+		if err != nil {
+			if verbose {
+				fmt.Printf("ERROR: %v\n", err)
+			}
+			result.Valid = false
+			result.MissingActions = append(result.MissingActions, actionPath)
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", actionPath, err))
+		} else if !exists {
+			if verbose {
+				fmt.Println("NOT FOUND")
+			}
+			result.Valid = false
+			result.MissingActions = append(result.MissingActions, actionPath)
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: not found", actionPath))
+		} else {
+			if verbose {
+				fmt.Println("OK")
+			}
+			result.CheckedActions = append(result.CheckedActions, actionPath)
+		}
+	}
+
+	return result, nil
+}
+
+// extractActionInvocations finds all action invocations in source code
+func extractActionInvocations(source string) []string {
+	actionSet := make(map[string]bool)
+	
+	// Match patterns like: /_/actionName( or /namespace/actionName(
+	actionPattern := regexp.MustCompile(`/([\w_\-/]+)\s*\(`)
+	matches := actionPattern.FindAllStringSubmatch(source, -1)
+	
+	for _, match := range matches {
+		if len(match) > 1 {
+			actionPath := "/" + match[1]
+			actionSet[actionPath] = true
+		}
+	}
+	
+	// Convert map to slice
+	actions := make([]string, 0, len(actionSet))
+	for action := range actionSet {
+		actions = append(actions, action)
+	}
+	
+	return actions
+}
+
+// checkActionExists verifies if an action exists in OpenWhisk
+func checkActionExists(actionPath string) (bool, error) {
+	// Parse action path: /namespace/packageName/actionName or /_/actionName
+	parts := strings.Split(strings.Trim(actionPath, "/"), "/")
+	if len(parts) == 0 {
+		return false, fmt.Errorf("invalid action path: %s", actionPath)
+	}
+
+	// Extract components
+	var actionName string
+	if len(parts) == 1 {
+		// /_/actionName -> actionName in default namespace
+		actionName = parts[0]
+	} else if len(parts) == 2 {
+		// /_/actionName or /namespace/actionName
+		if parts[0] == "_" {
+			actionName = parts[1]
+		} else {
+			// Assume it's namespace/action
+			actionName = parts[1]
+		}
+	} else {
+		// /namespace/package/action
+		actionName = strings.Join(parts[1:], "/")
+	}
+
+	// Try to get the action
+	_, _, err := Client.Actions.Get(actionName, false)
+	if err != nil {
+		// Check if it's a 404 error
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+			return false, nil
+		}
+		// Other error (permissions, network, etc.)
+		return false, err
+	}
+
+	return true, nil
+}
+
+// getActionName extracts the action name from a path
+func getActionName(actionPath string) string {
+	parts := strings.Split(strings.Trim(actionPath, "/"), "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return actionPath
+}
+
+// findSchemaFile searches for action-schema.json in multiple locations
+func findSchemaFile(dagFilePath string, explicitPath string) string {
+	// If explicit path provided, use it
+	if explicitPath != "" {
+		if _, err := os.Stat(explicitPath); err == nil {
+			return explicitPath
+		}
+		// Explicit path provided but doesn't exist - return it anyway to give clear error
+		return explicitPath
+	}
+
+	// Auto-discovery locations (in order of priority)
+	locations := []string{
+		// 1. Same directory as the DAG file
+		"",
+		// 2. actions/dag directory
+		"actions/dag/action-schema.json",
+		// 3. actions directory
+		"actions/action-schema.json",
+		// 4. Current directory
+		"action-schema.json",
+	}
+
+	// Calculate path relative to DAG file
+	if dagFilePath != "" {
+		dagDir := ""
+		lastSlash := strings.LastIndexAny(dagFilePath, "/\\")
+		if lastSlash >= 0 {
+			dagDir = dagFilePath[:lastSlash+1]
+		}
+		locations[0] = dagDir + "action-schema.json"
+	}
+
+	// Check each location
+	for _, path := range locations {
+		if path == "" {
+			continue
+		}
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+
+	// Not found - return empty string
+	return ""
+}
+
+// TypeCheckResult holds the result of type checking
+type TypeCheckResult struct {
+	Valid    bool     `json:"valid"`
+	Errors   []string `json:"errors"`
+	Warnings []string `json:"warnings"`
+}
+
+// performTypeChecking validates types using the TypeChecker
+func performTypeChecking(source string, schemas []byte, verbose bool) (*TypeCheckResult, error) {
+	vm := goja.New()
+
+	// Load type checker
+	if _, err := vm.RunString(string(typeCheckerJS)); err != nil {
+		return nil, fmt.Errorf("loading type checker: %w", err)
+	}
+
+	// Load compiler (needed for AST parsing)
+	if _, err := vm.RunString(string(compilerJS)); err != nil {
+		return nil, fmt.Errorf("loading compiler: %w", err)
+	}
+
+	// Parse schemas - we need to parse it first
+	schemasStr := string(schemas)
+	
+	// Create TypeChecker instance with schemas as JSON string
+	typeCheckerCtor := vm.Get("TypeChecker")
+	
+	// Parse the schema JSON in JavaScript
+	vm.Set("schemasJSON", schemasStr)
+	schemasObjVal, err := vm.RunString("JSON.parse(schemasJSON)")
+	if err != nil {
+		return nil, fmt.Errorf("invalid schema JSON: %w", err)
+	}
+
+	typeCheckerInst, err := vm.New(typeCheckerCtor, schemasObjVal, vm.ToValue(map[string]interface{}{
+		"strict": strings.Contains(source, "#strict"),
+	}))
+	if err != nil {
+		return nil, fmt.Errorf("creating TypeChecker: %w", err)
+	}
+	typeCheckerObj := typeCheckerInst.ToObject(vm)
+
+	// Compile source to AST
+	compilerCtor := vm.Get("DagularCompiler")
+	compilerInst, err := vm.New(compilerCtor)
+	if err != nil {
+		return nil, fmt.Errorf("creating compiler: %w", err)
+	}
+	compilerObj := compilerInst.ToObject(vm)
+
+	compileFn, ok := goja.AssertFunction(compilerObj.Get("compile"))
+	if !ok {
+		return nil, fmt.Errorf("compile method not found")
+	}
+
+	ast, err := compileFn(compilerObj, vm.ToValue(source))
+	if err != nil {
+		return nil, fmt.Errorf("compilation failed: %w", err)
+	}
+
+	// Run type checking
+	checkASTFn, ok := goja.AssertFunction(typeCheckerObj.Get("checkAST"))
+	if !ok {
+		return nil, fmt.Errorf("checkAST method not found")
+	}
+
+	result, err := checkASTFn(typeCheckerObj, ast)
+	if err != nil {
+		return nil, fmt.Errorf("type checking failed: %w", err)
+	}
+
+	// Extract result
+	resultObj := result.ToObject(vm)
+	valid := resultObj.Get("valid").ToBoolean()
+	
+	errorsVal := resultObj.Get("errors")
+	var errors []string
+	if errorsArr, ok := errorsVal.Export().([]interface{}); ok {
+		for _, e := range errorsArr {
+			if errMap, ok := e.(map[string]interface{}); ok {
+				if msg, ok := errMap["message"].(string); ok {
+					errors = append(errors, msg)
+				}
+			}
+		}
+	}
+
+	warningsVal := resultObj.Get("warnings")
+	var warnings []string
+	if warningsArr, ok := warningsVal.Export().([]interface{}); ok {
+		for _, w := range warningsArr {
+			if warnMap, ok := w.(map[string]interface{}); ok {
+				if msg, ok := warnMap["message"].(string); ok {
+					warnings = append(warnings, msg)
+				}
+			}
+		}
+	}
+
+	return &TypeCheckResult{
+		Valid:    valid,
+		Errors:   errors,
+		Warnings: warnings,
+	}, nil
+}
 

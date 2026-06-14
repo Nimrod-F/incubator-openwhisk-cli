@@ -1,0 +1,47 @@
+// Test DAG file to demonstrate action validation
+// This file will be used to test the validation feature
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SCENARIO 1: All actions exist (should pass validation)
+// ═══════════════════════════════════════════════════════════════════════════
+/*
+// Assuming these actions are deployed:
+// - /_/hello
+// - /_/world
+// - /_/sendEmail
+
+greeting = hello(name: "Alice")
+message = world(msg: greeting)
+result = sendEmail(
+    to: "alice@example.com",
+    subject: message,
+    body: "Test email"
+)
+return result
+*/
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SCENARIO 2: Some actions missing (should fail validation)
+// ═══════════════════════════════════════════════════════════════════════════
+/*
+// This will fail because 'notDeployed' action doesn't exist
+data = fetchData(id: "123")           // Exists
+processed = notDeployed(data: data)   // ❌ MISSING
+result = saveData(data: processed)    // Exists
+return result
+*/
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SCENARIO 3: Complex workflow with multiple actions
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Initialize
+setup = initialize()
+
+// Parallel processing (all must exist)
+process1(data: setup)
+process2(data: setup)
+process3(data: setup)
+
+// Final aggregation
+return "Processing complete"

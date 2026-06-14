@@ -1,9 +1,9 @@
 function main(params) {
   return {
-  output: {
-    message: "Hello, " + (params.name || "stranger") + "!"
-  }
-};
+    output: {
+      message: "Hello, " + (params.name || "stranger") + "!",
+    },
+  };
 }
 
 // // hello.js

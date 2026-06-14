@@ -1,0 +1,33 @@
+{
+    "data": "block_expr",
+    "children": [
+        {
+            "data": "invocation",
+            "children": [
+                "/_/hello",
+                {
+                    "data": "dict",
+                    "children": [
+                        {
+                            "data": "pair",
+                            "children": [
+                                {
+                                    "data": "id",
+                                    "children": [
+                                        "name"
+                                    ]
+                                },
+                                {
+                                    "data": "string",
+                                    "children": [
+                                        "world"
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

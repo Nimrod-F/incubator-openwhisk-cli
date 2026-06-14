@@ -1,0 +1,36 @@
+{
+    "data": "block_expr",
+    "children": [
+        {
+            "data": "invocation",
+            "children": [
+                "/_/slow3",
+                {
+                    "data": "dict",
+                    "children": []
+                }
+            ]
+        },
+        {
+            "data": "invocation",
+            "children": [
+                "/_/slow2",
+                {
+                    "data": "dict",
+                    "children": []
+                }
+            ]
+        },
+        {
+            "data": "return",
+            "children": [
+                {
+                    "data": "string",
+                    "children": [
+                        "completed"
+                    ]
+                }
+            ]
+        }
+    ]
+}

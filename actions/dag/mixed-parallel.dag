@@ -1,0 +1,4 @@
+let x = 5
+/_/slow3()
+/_/slow2()
+return x

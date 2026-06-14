@@ -1,0 +1,60 @@
+{
+    "data": "block_expr",
+    "children": [
+        {
+            "data": "return",
+            "children": [
+                {
+                    "data": "invocation",
+                    "children": [
+                        "/_/world",
+                        {
+                            "data": "dict",
+                            "children": [
+                                {
+                                    "data": "pair",
+                                    "children": [
+                                        {
+                                            "data": "id",
+                                            "children": [
+                                                "msg"
+                                            ]
+                                        },
+                                        {
+                                            "data": "invocation",
+                                            "children": [
+                                                "/_/hello",
+                                                {
+                                                    "data": "dict",
+                                                    "children": [
+                                                        {
+                                                            "data": "pair",
+                                                            "children": [
+                                                                {
+                                                                    "data": "id",
+                                                                    "children": [
+                                                                        "name"
+                                                                    ]
+                                                                },
+                                                                {
+                                                                    "data": "string",
+                                                                    "children": [
+                                                                        "Dani"
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,53 @@
+{
+    "data": "block_expr",
+    "children": [
+        {
+            "data": "assign",
+            "children": [
+                {
+                    "data": "id",
+                    "children": [
+                        "x"
+                    ]
+                },
+                {
+                    "data": "number",
+                    "children": [
+                        5
+                    ]
+                }
+            ]
+        },
+        {
+            "data": "invocation",
+            "children": [
+                "/_/slow3",
+                {
+                    "data": "dict",
+                    "children": []
+                }
+            ]
+        },
+        {
+            "data": "invocation",
+            "children": [
+                "/_/slow2",
+                {
+                    "data": "dict",
+                    "children": []
+                }
+            ]
+        },
+        {
+            "data": "return",
+            "children": [
+                {
+                    "data": "id",
+                    "children": [
+                        "x"
+                    ]
+                }
+            ]
+        }
+    ]
+}

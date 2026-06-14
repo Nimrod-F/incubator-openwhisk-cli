@@ -1,0 +1,121 @@
+{
+    "data": "block_expr",
+    "children": [
+        {
+            "data": "assign",
+            "children": [
+                {
+                    "data": "id",
+                    "children": [
+                        "result"
+                    ]
+                },
+                {
+                    "data": "invocation",
+                    "children": [
+                        "/_/initialize",
+                        {
+                            "data": "dict",
+                            "children": []
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "data": "invocation",
+            "children": [
+                "/_/process1",
+                {
+                    "data": "dict",
+                    "children": [
+                        {
+                            "data": "pair",
+                            "children": [
+                                {
+                                    "data": "id",
+                                    "children": [
+                                        "data"
+                                    ]
+                                },
+                                {
+                                    "data": "id",
+                                    "children": [
+                                        "result"
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "data": "invocation",
+            "children": [
+                "/_/process2",
+                {
+                    "data": "dict",
+                    "children": [
+                        {
+                            "data": "pair",
+                            "children": [
+                                {
+                                    "data": "id",
+                                    "children": [
+                                        "data"
+                                    ]
+                                },
+                                {
+                                    "data": "id",
+                                    "children": [
+                                        "result"
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "data": "invocation",
+            "children": [
+                "/_/process3",
+                {
+                    "data": "dict",
+                    "children": [
+                        {
+                            "data": "pair",
+                            "children": [
+                                {
+                                    "data": "id",
+                                    "children": [
+                                        "data"
+                                    ]
+                                },
+                                {
+                                    "data": "id",
+                                    "children": [
+                                        "result"
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "data": "return",
+            "children": [
+                {
+                    "data": "string",
+                    "children": [
+                        "All processing completed"
+                    ]
+                }
+            ]
+        }
+    ]
+}
